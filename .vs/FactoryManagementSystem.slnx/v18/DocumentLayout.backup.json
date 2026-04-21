@@ -3,6 +3,14 @@
   "WorkspaceRootPath": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|c:\\users\\juo\\desktop\\tantientask\\factorymanagementsystem\\factorymanagementsystem\\factorymanagementsystem.csproj.backup.tmp||{FA3CD31E-987B-443A-9B81-186104E8DAC1}",
+      "RelativeMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|solutionrelative:factorymanagementsystem\\factorymanagementsystem.csproj.backup.tmp||{FA3CD31E-987B-443A-9B81-186104E8DAC1}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|c:\\users\\juo\\desktop\\tantientask\\factorymanagementsystem\\factorymanagementsystem\\controllers\\recipescontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|solutionrelative:factorymanagementsystem\\controllers\\recipescontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|c:\\users\\juo\\desktop\\tantientask\\factorymanagementsystem\\factorymanagementsystem\\controllers\\productionorderdetailscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|solutionrelative:factorymanagementsystem\\controllers\\productionorderdetailscontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -43,10 +51,6 @@
       "RelativeMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|solutionrelative:factorymanagementsystem\\services\\productionordersservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|c:\\users\\juo\\desktop\\tantientask\\factorymanagementsystem\\factorymanagementsystem\\controllers\\recipescontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|solutionrelative:factorymanagementsystem\\controllers\\recipescontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|c:\\users\\juo\\desktop\\tantientask\\factorymanagementsystem\\factorymanagementsystem\\services\\iproductionordersservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{596784EE-D69E-4313-BCBF-8B3DE8835BFC}|FactoryManagementSystem\\FactoryManagementSystem.csproj|solutionrelative:factorymanagementsystem\\services\\iproductionordersservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -82,11 +86,24 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 7,
+          "SelectedChildIndex": 0,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 0,
+              "Title": "FactoryManagementSystem.csproj.Backup.tmp",
+              "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\FactoryManagementSystem.csproj.Backup.tmp",
+              "RelativeDocumentMoniker": "FactoryManagementSystem\\FactoryManagementSystem.csproj.Backup.tmp",
+              "ToolTip": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\FactoryManagementSystem.csproj.Backup.tmp",
+              "RelativeToolTip": "FactoryManagementSystem\\FactoryManagementSystem.csproj.Backup.tmp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAANAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-04-21T06:31:34.259Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
               "Title": "MaterialsService.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Services\\MaterialsService.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Services\\MaterialsService.cs",
@@ -99,7 +116,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 8,
               "Title": "IProductsService.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Services\\IProductsService.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Services\\IProductsService.cs",
@@ -112,7 +129,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 1,
               "Title": "RecipesController.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Controllers\\RecipesController.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Controllers\\RecipesController.cs",
@@ -125,7 +142,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 6,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Program.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Program.cs",
@@ -138,7 +155,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 5,
               "Title": "ProductsController.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Controllers\\ProductsController.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Controllers\\ProductsController.cs",
@@ -151,7 +168,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 4,
               "Title": "ProductionOrdersController.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Controllers\\ProductionOrdersController.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Controllers\\ProductionOrdersController.cs",
@@ -164,7 +181,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
               "Title": "MaterialsController.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Controllers\\MaterialsController.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Controllers\\MaterialsController.cs",
@@ -177,20 +194,20 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 2,
               "Title": "ProductionOrderDetailsController.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Controllers\\ProductionOrderDetailsController.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Controllers\\ProductionOrderDetailsController.cs",
               "ToolTip": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Controllers\\ProductionOrderDetailsController.cs",
               "RelativeToolTip": "FactoryManagementSystem\\Controllers\\ProductionOrderDetailsController.cs",
-              "ViewState": "AgIAACkAAAAAAAAAAAAwwDMAAAAnAAAAAAAAAA==",
+              "ViewState": "AgIAAEEAAAAAAAAAAAAIwGsAAAANAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-04-21T04:02:57.018Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 9,
               "Title": "ProductsService.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Services\\ProductsService.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Services\\ProductsService.cs",
@@ -203,7 +220,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 7,
               "Title": "IgsmasanDbContext.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Models\\IgsmasanDbContext.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Models\\IgsmasanDbContext.cs",
@@ -216,7 +233,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
+              "DocumentIndex": 12,
               "Title": "IProductionOrdersService.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Services\\IProductionOrdersService.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Services\\IProductionOrdersService.cs",
@@ -229,7 +246,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 11,
               "Title": "ProductionOrdersService.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Services\\ProductionOrdersService.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Services\\ProductionOrdersService.cs",
@@ -242,7 +259,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 12,
+              "DocumentIndex": 13,
               "Title": "appsettings.json",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\appsettings.json",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\appsettings.json",
@@ -255,7 +272,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 13,
+              "DocumentIndex": 14,
               "Title": "RejectionReasonMaster.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Models\\RejectionReasonMaster.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Models\\RejectionReasonMaster.cs",
@@ -268,7 +285,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 14,
+              "DocumentIndex": 15,
               "Title": "Requester.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Models\\Requester.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Models\\Requester.cs",
@@ -281,7 +298,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 15,
+              "DocumentIndex": 16,
               "Title": "VSendConsumption.cs",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\Models\\VSendConsumption.cs",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\Models\\VSendConsumption.cs",
@@ -294,7 +311,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 16,
+              "DocumentIndex": 17,
               "Title": "FactoryManagementSystem.http",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\FactoryManagementSystem.http",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\FactoryManagementSystem.http",
@@ -307,7 +324,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 17,
+              "DocumentIndex": 18,
               "Title": "FactoryManagementSystem",
               "DocumentMoniker": "C:\\Users\\Juo\\Desktop\\TanTienTask\\FactoryManagementSystem\\FactoryManagementSystem\\FactoryManagementSystem.csproj",
               "RelativeDocumentMoniker": "FactoryManagementSystem\\FactoryManagementSystem.csproj",
