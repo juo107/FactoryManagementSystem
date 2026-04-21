@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using FactoryManagementSystem.Services;
+using FactoryManagementSystem.Interfaces;
 
 namespace FactoryManagementSystem.Controllers
 {

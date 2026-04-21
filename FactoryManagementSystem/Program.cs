@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using FactoryManagementSystem.Models;
 using FactoryManagementSystem.Services;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.Cache;
+using StackExchange.Redis;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
 
@@ -35,6 +38,11 @@ builder.Services.AddScoped<IMaterialsService, MaterialsService>();
 builder.Services.AddScoped<IProductsService, ProductsService>();
 builder.Services.AddScoped<IRecipesService, RecipesService>();
 builder.Services.AddScoped<IProductionOrderDetailsService, ProductionOrderDetailsService>();
+
+// Redis Configuration
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp => 
+    ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379"));
+builder.Services.AddScoped<IRedisCacheService, RedisCacheService>();
 
 // Swagger/OpenAPI Configuration
 builder.Services.AddEndpointsApiExplorer();

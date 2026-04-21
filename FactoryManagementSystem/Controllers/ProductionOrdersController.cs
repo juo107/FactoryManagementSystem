@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using FactoryManagementSystem.Services;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.ProductionOrders;
 
 namespace FactoryManagementSystem.Controllers
 {
@@ -15,7 +17,7 @@ namespace FactoryManagementSystem.Controllers
         }
 
         [HttpGet("filters")]
-        public async Task<IActionResult> Filters([FromQuery] string dateFrom = "", [FromQuery] string dateTo = "")
+        public async Task<ActionResult<ApiResponse<OrderFiltersDto>>> Filters([FromQuery] string dateFrom = "", [FromQuery] string dateTo = "")
         {
             try
             {
@@ -24,12 +26,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("filters-v2")]
-        public async Task<IActionResult> FiltersV2([FromQuery] string dateFrom = "", [FromQuery] string dateTo = "")
+        public async Task<ActionResult<ApiResponse<OrderFiltersDto>>> FiltersV2([FromQuery] string dateFrom = "", [FromQuery] string dateTo = "")
         {
             try
             {
@@ -38,12 +40,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("stats/search")]
-        public async Task<IActionResult> StatsSearch(
+        public async Task<ActionResult<ApiResponse<OrderStatsDto>>> StatsSearch(
             [FromQuery] string searchQuery = "",
             [FromQuery] string dateFrom = "",
             [FromQuery] string dateTo = "",
@@ -59,12 +61,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("stats-v2/search")]
-        public async Task<IActionResult> StatsSearchV2(
+        public async Task<ActionResult<ApiResponse<OrderStatsDto>>> StatsSearchV2(
             [FromQuery] string searchQuery = "",
             [FromQuery] string dateFrom = "",
             [FromQuery] string dateTo = "",
@@ -82,12 +84,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("search")]
-        public async Task<IActionResult> Search(
+        public async Task<ActionResult<ApiResponse<PagedResponse<ProductionOrderDto>>>> Search(
             [FromQuery] string? searchQuery = "",
             [FromQuery] string? dateFrom = "",
             [FromQuery] string? dateTo = "",
@@ -106,12 +108,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("search-v2")]
-        public async Task<IActionResult> SearchV2(
+        public async Task<ActionResult<ApiResponse<PagedResponse<ProductionOrderDto>>>> SearchV2(
             [FromQuery] string? searchQuery = "",
             [FromQuery] string? dateFrom = "",
             [FromQuery] string? dateTo = "",
@@ -132,7 +134,7 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
     }

@@ -1,22 +1,30 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using System.Linq;
+using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.Recipes;
 
 namespace FactoryManagementSystem.Services
 {
     public class RecipesService : IRecipesService
     {
         private readonly IConfiguration _config;
+        private readonly IRedisCacheService _cache;
 
-        public RecipesService(IConfiguration config)
+        public RecipesService(IConfiguration config, IRedisCacheService cache)
         {
             _config = config;
+            _cache = cache;
         }
 
         private IDbConnection Connection => new SqlConnection(_config.GetConnectionString("DefaultConnection"));
 
-        public async Task<object> GetStatsSearchAsync(string? search, string? status, string? statuses)
+        public async Task<ApiResponse<object>> GetStatsSearchAsync(string? search, string? status, string? statuses)
         {
             var whereCommon = new StringBuilder("1=1");
             var parameters = new DynamicParameters();
@@ -47,19 +55,16 @@ namespace FactoryManagementSystem.Services
 
             using var conn = Connection;
             var stats = await conn.QueryFirstOrDefaultAsync(sql, parameters);
-            return new {
-                success = true,
-                message = "Success",
-                stats = new {
-                    total = stats?.total ?? 0,
-                    active = stats?.active ?? 0,
-                    totalVersions = stats?.totalVersions ?? 0,
-                    draft = 0
-                }
-            };
+            var result = ApiResponse<object>.Success(new {
+                total = stats?.total ?? 0,
+                active = stats?.active ?? 0,
+                totalVersions = stats?.totalVersions ?? 0,
+                draft = 0
+            });
+            return result;
         }
 
-        public async Task<object> SearchAsync(int page, int limit, string? search, string? status, string? statuses)
+        public async Task<ApiResponse<PagedResponse<RecipeDto>>> SearchAsync(int page, int limit, string? search, string? status, string? statuses)
         {
             page = Math.Max(1, page);
             limit = Math.Max(1, Math.Min(100, limit));
@@ -97,15 +102,22 @@ namespace FactoryManagementSystem.Services
             parameters.Add("skip", skip);
             parameters.Add("limit", limit);
 
-            var data = await conn.QueryAsync(dataSql, parameters);
-            return new { success = true, data, total, totalPages, page, limit };
+            var data = await conn.QueryAsync<RecipeDto>(dataSql, parameters);
+            var result = ApiResponse<PagedResponse<RecipeDto>>.Success(
+                new PagedResponse<RecipeDto>(data, total, page, limit)
+            );
+            return result;
         }
 
-        public async Task<object> GetByIdAsync(int id)
+        public async Task<ApiResponse<RecipeDetailResponseDto>> GetByIdAsync(int id)
         {
+            string cacheKey = $"recipes:detail:{id}";
+            var cached = await _cache.GetAsync<ApiResponse<RecipeDetailResponseDto>>(cacheKey);
+            if (cached != null) return cached;
+
             using var conn = Connection;
-            var recipe = await conn.QueryFirstOrDefaultAsync("SELECT * FROM RecipeDetails WHERE RecipeDetailsId = @id", new { id });
-            if (recipe == null) return null;
+            var recipe = await conn.QueryFirstOrDefaultAsync<RecipeDto>("SELECT * FROM RecipeDetails WHERE RecipeDetailsId = @id", new { id });
+            if (recipe == null) return ApiResponse<RecipeDetailResponseDto>.Error("Recipe not found", "404");
 
             var processes = (await conn.QueryAsync("SELECT * FROM Processes WHERE RecipeDetailsId = @id", new { id })).ToList();
             var processIds = processes.Select(p => (int)p.ProcessId).ToList();
@@ -122,15 +134,19 @@ namespace FactoryManagementSystem.Services
             IEnumerable<dynamic> parameters = new List<dynamic>();
             if (processIds.Any()) { parameters = await conn.QueryAsync(@"SELECT p.*, ppm.Name as ParameterName FROM Parameters p LEFT JOIN ProcessParameterMasters ppm ON p.Code = ppm.Code WHERE p.ProcessId IN @processIds", new { processIds }); }
 
-            return new {
-                success = true,
-                recipe,
-                processes,
-                ingredients,
-                products,
-                byProducts,
-                parameters
+            var responseData = new RecipeDetailResponseDto
+            {
+                Recipe = recipe,
+                Processes = processes,
+                Ingredients = ingredients,
+                Products = products,
+                ByProducts = byProducts,
+                Parameters = parameters
             };
+
+            var result = ApiResponse<RecipeDetailResponseDto>.Success(responseData);
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
+            return result;
         }
     }
 }

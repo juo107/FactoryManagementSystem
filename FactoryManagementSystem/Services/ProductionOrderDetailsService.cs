@@ -1,30 +1,43 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
 using System.Data;
-using System.Text.Json;
+using System.Linq;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.ProductionOrders;
 
 namespace FactoryManagementSystem.Services
 {
     public class ProductionOrderDetailsService : IProductionOrderDetailsService
     {
         private readonly IConfiguration _config;
+        private readonly IRedisCacheService _cache;
 
-        public ProductionOrderDetailsService(IConfiguration config)
+        public ProductionOrderDetailsService(IConfiguration config, IRedisCacheService cache)
         {
             _config = config;
+            _cache = cache;
         }
 
         private IDbConnection Connection => new SqlConnection(_config.GetConnectionString("DefaultConnection"));
 
-        public async Task<object> GetBatchesAsync(int productionOrderId)
+        public async Task<ApiResponse<IEnumerable<BatchDto>>> GetBatchesAsync(int productionOrderId)
         {
+            string cacheKey = $"production_details:batches:{productionOrderId}";
+            var cached = await _cache.GetAsync<ApiResponse<IEnumerable<BatchDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             var sql = @"SELECT * FROM Batches WHERE ProductionOrderId = @ProductionOrderId";
             using var conn = Connection;
-            var data = await conn.QueryAsync(sql, new { ProductionOrderId = productionOrderId });
-            return new { success = true, data };
+            var data = await conn.QueryAsync<BatchDto>(sql, new { ProductionOrderId = productionOrderId });
+            var result = ApiResponse<IEnumerable<BatchDto>>.Success(data);
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
-        public async Task<object> GetIngredientsByProductAsync(string productionOrderNumber)
+        public async Task<ApiResponse<object>> GetIngredientsByProductAsync(string productionOrderNumber)
         {
             var sql = @"
               SELECT
@@ -50,17 +63,15 @@ namespace FactoryManagementSystem.Services
             using var conn = Connection;
             var rows = (await conn.QueryAsync(sql, new { prodOrderNum = productionOrderNumber.Trim() })).ToList();
             
-            return new {
-                success = true,
-                message = "Lấy danh sách ingredients thành công",
+            return ApiResponse<object>.Success(new {
                 productCode = rows.Any() ? rows[0].ProductCode : null,
                 recipeVersion = rows.Any() ? rows[0].RecipeVersion : null,
                 total = rows.Count,
                 data = rows
-            };
+            });
         }
 
-        public async Task<object> GetMaterialConsumptionsAsync(string productionOrderNumber, int page, int limit)
+        public async Task<ApiResponse<object>> GetMaterialConsumptionsAsync(string productionOrderNumber, int page, int limit)
         {
             var pageNum = Math.Max(1, page);
             var pageLimit = Math.Min(100, Math.Max(1, limit));
@@ -166,34 +177,32 @@ namespace FactoryManagementSystem.Services
             using var conn = Connection;
             var rows = await conn.QueryAsync(sql, new { prodOrderNum = productionOrderNumber.Trim(), from, to });
             var data = rows.Select(row => new {
-                id = row.id,
-                batchCode = row.batchCode,
-                ingredientCode = row.ItemName != null
+                Id = row.id,
+                BatchCode = row.batchCode,
+                IngredientCode = row.ItemName != null
                   ? $"{(string)row.IngredientCode} - {(string)row.ItemName}"
                   : (string)row.IngredientCode,
-                lot = row.lot ?? "",
-                quantity = row.quantity,
-                unitOfMeasurement = row.unitOfMeasurement ?? "",
-                datetime = row.datetime,
-                operator_ID = row.operator_ID,
-                supplyMachine = row.supplyMachine,
-                count = row.count ?? 0,
-                request = row.request,
-                respone = row.respone,
-                status1 = row.status1,
-                timestamp = row.timestamp
+                Lot = row.lot ?? "",
+                Quantity = row.quantity,
+                UnitOfMeasurement = row.unitOfMeasurement ?? "",
+                Datetime = row.datetime,
+                Operator_ID = row.operator_ID,
+                SupplyMachine = row.supplyMachine,
+                Count = row.count ?? 0,
+                Request = row.request,
+                Respone = row.respone,
+                Status1 = row.status1,
+                Timestamp = row.timestamp
             });
 
-            return new {
-                success = true,
-                message = "Lấy danh sách tiêu hao vật liệu thành công",
+            return ApiResponse<object>.Success(new {
                 page = pageNum,
                 limit = pageLimit,
-                data
-            };
+                items = data
+            });
         }
 
-        public async Task<object> GetMaterialConsumptionsExcludeBatchesAsync(string productionOrderNumber, int page, int limit, List<dynamic>? batchCodesWithMaterials)
+        public async Task<ApiResponse<object>> GetMaterialConsumptionsExcludeBatchesAsync(string productionOrderNumber, int page, int limit, List<dynamic>? batchCodesWithMaterials)
         {
             var pageNum = Math.Max(1, page);
             var pageLimit = Math.Min(100, Math.Max(1, limit));
@@ -206,8 +215,7 @@ namespace FactoryManagementSystem.Services
             if (batchCodesWithMaterials != null && batchCodesWithMaterials.Any())
             {
                 var batchNumbers = batchCodesWithMaterials.Select(b => {
-                    if (b is JsonElement je)
-                        return je.GetProperty("batchCode").GetString();
+                    // Handle dynamic types safely
                     return (string)b.batchCode;
                 }).Where(x => x != null).ToList();
                 var ps = new List<string>();
@@ -234,15 +242,13 @@ namespace FactoryManagementSystem.Services
             var totalCount = await conn.ExecuteScalarAsync<int>(countSql, p);
             if (totalCount == 0)
             {
-                return new {
-                    success = true,
-                    message = "Không có dữ liệu",
+                return ApiResponse<object>.Success(new {
                     page = pageNum,
                     limit = pageLimit,
                     totalCount = 0,
                     totalPages = 0,
-                    data = new List<object>()
-                };
+                    items = new List<object>()
+                });
             }
 
             p.Add("offset", offset);
@@ -282,165 +288,104 @@ namespace FactoryManagementSystem.Services
             var rows = await conn.QueryAsync(dataSql, p);
 
             var data = rows.Select(row => new {
-                id = row.id,
-                productionOrderNumber = row.productionOrderNumber,
-                batchCode = row.batchCode, // consistently NULL per legacy
-                ingredientCode = row.ItemName != null
+                Id = row.id,
+                ProductionOrderNumber = row.productionOrderNumber,
+                BatchCode = row.batchCode,
+                IngredientCode = row.ItemName != null
                   ? $"{(string)row.ingredientCode} - {(string)row.ItemName}"
                   : (string)row.ingredientCode,
-                lot = row.lot,
-                quantity = row.quantity,
-                unitOfMeasurement = row.unitOfMeasurement,
-                datetime = row.datetime,
-                operator_ID = row.operator_ID,
-                supplyMachine = row.supplyMachine,
-                count = row.count ?? 0,
-                request = row.request,
-                respone = row.respone,
-                status1 = row.status1,
-                timestamp = row.timestamp
+                Lot = row.lot,
+                Quantity = row.quantity,
+                UnitOfMeasurement = row.unitOfMeasurement,
+                Datetime = row.datetime,
+                Operator_ID = row.operator_ID,
+                SupplyMachine = row.supplyMachine,
+                Count = row.count ?? 0,
+                Request = row.request,
+                Respone = row.respone,
+                Status1 = row.status1,
+                Timestamp = row.timestamp
             });
 
-            return new {
-                success = true,
-                message = "Lấy danh sách tiêu hao vật liệu (không thuộc batch) thành công",
+            return ApiResponse<object>.Success(new {
                 page = pageNum,
                 limit = pageLimit,
                 totalCount,
                 totalPages = (int)Math.Ceiling((double)totalCount / pageLimit),
-                data
-            };
+                items = data
+            });
         }
 
-        public async Task<object> GetBatchCodesWithMaterialsAsync(string productionOrderNumber)
+        public async Task<ApiResponse<object>> GetBatchCodesWithMaterialsAsync(string productionOrderNumber)
         {
             var sql = @"SELECT DISTINCT batchCode FROM MESMaterialConsumption WHERE ProductionOrderNumber = @productionOrderNumber ORDER BY batchCode ASC";
             using var conn = Connection;
             var rows = await conn.QueryAsync(sql, new { productionOrderNumber });
-            return new {
-                success = true,
-                message = "Lấy danh sách batch codes có dữ liệu thành công",
-                data = rows.Select(r => new { batchCode = r.batchCode })
-            };
+            return ApiResponse<object>.Success(rows.Select(r => new { BatchCode = r.batchCode }));
         }
 
-        public async Task<object> GetRecipeVersionsAsync(string recipeCode, string? version)
+        public async Task<ApiResponse<object>> GetRecipeVersionsAsync(string recipeCode, string? version)
         {
             var sql = @"SELECT rd.*, pm.ItemName FROM RecipeDetails rd LEFT JOIN ProductMasters pm ON pm.ItemCode = rd.ProductCode WHERE rd.RecipeCode = @RecipeCode";
             if (!string.IsNullOrEmpty(version)) sql += " AND rd.Version = @Version";
             using var conn = Connection;
             var data = await conn.QueryAsync(sql, new { RecipeCode = recipeCode, Version = version });
-            return new { success = true, data };
+            return ApiResponse<object>.Success(data);
         }
 
-        public async Task<object> GetByIdAsync(int id)
+        public async Task<ApiResponse<ProductionOrderDto>> GetByIdAsync(int id)
         {
+            string cacheKey = $"production_details:detail:{id}";
+            var cached = await _cache.GetAsync<ApiResponse<ProductionOrderDto>>(cacheKey);
+            if (cached != null) return cached;
+
             var sql = @"
               SELECT
-                po.ProductionOrderId,
-                po.ProductionLine,
-                po.ProductCode,
-                po.ProductionOrderNumber,
-                po.RecipeCode,
-                po.RecipeVersion,
-                po.Shift,
-                po.PlannedStart,
-                po.PlannedEnd,
-                po.Quantity,
-                po.UnitOfMeasurement,
-                po.LotNumber,
-                po.timestamp,
-                po.Plant,
-                po.Shopfloor,
-                po.ProcessArea,
-                po.Status,
-
+                po.*,
                 pm.ItemName,
-                ing.PlanQuantity AS ProductQuantity,
-
                 rd.RecipeName,
-                MAX(rd.RecipeDetailsId) AS RecipeDetailsId,
-
+                rd.RecipeDetailsId,
                 MAX(mc.BatchCode) AS CurrentBatch,
                 COUNT(DISTINCT b.BatchNumber) AS TotalBatches
-
               FROM ProductionOrders po
-
-              LEFT JOIN ProductMasters pm 
-                ON po.ProductCode = pm.ItemCode
-
-              LEFT JOIN Products ing 
-                ON po.ProductCode = ing.ProductCode
-
-              LEFT JOIN RecipeDetails rd 
-                ON po.RecipeCode = rd.RecipeCode
-               AND po.RecipeVersion = rd.Version
-
-              LEFT JOIN MESMaterialConsumption mc
-                ON mc.ProductionOrderNumber = po.ProductionOrderNumber
-
-              LEFT JOIN Batches b
-                ON b.ProductionOrderId = po.ProductionOrderId
-
+              LEFT JOIN ProductMasters pm ON po.ProductCode = pm.ItemCode
+              LEFT JOIN RecipeDetails rd ON po.RecipeCode = rd.RecipeCode AND po.RecipeVersion = rd.Version
+              LEFT JOIN MESMaterialConsumption mc ON mc.ProductionOrderNumber = po.ProductionOrderNumber
+              LEFT JOIN Batches b ON b.ProductionOrderId = po.ProductionOrderId
               WHERE po.ProductionOrderId = @ProductionOrderId
-
-              GROUP BY
-                po.ProductionOrderId,
-                po.ProductionLine,
-                po.ProductCode,
-                po.ProductionOrderNumber,
-                po.RecipeCode,
-                po.RecipeVersion,
-                po.Shift,
-                po.PlannedStart,
-                po.PlannedEnd,
-                po.Quantity,
-                po.UnitOfMeasurement,
-                po.LotNumber,
-                po.timestamp,
-                po.Plant,
-                po.Shopfloor,
-                po.ProcessArea,
-                po.Status,
-                pm.ItemName,
-                ing.PlanQuantity,
-                rd.RecipeName";
+              GROUP BY po.ProductionOrderId, po.ProductionLine, po.ProductCode, po.ProductionOrderNumber, 
+                       po.RecipeCode, po.RecipeVersion, po.Shift, po.PlannedStart, po.PlannedEnd, 
+                       po.Quantity, po.UnitOfMeasurement, po.LotNumber, po.timestamp, po.Plant, 
+                       po.Shopfloor, po.ProcessArea, po.Status, pm.ItemName, rd.RecipeName, rd.RecipeDetailsId";
 
             using var conn = Connection;
-            var order = await conn.QueryFirstOrDefaultAsync(sql, new { ProductionOrderId = id });
-            if (order == null) return null;
+            var o = await conn.QueryFirstOrDefaultAsync<dynamic>(sql, new { ProductionOrderId = id });
+            if (o == null) return ApiResponse<ProductionOrderDto>.Error("Order not found", "404");
 
-            var data = new {
-                ProductionOrderId = order.ProductionOrderId,
-                ProductionLine = order.ProductionLine,
-                ProductionOrderNumber = order.ProductionOrderNumber,
-                ProductCode = order.ItemName != null ? $"{order.ProductCode} - {order.ItemName}" : order.ProductCode,
-                RecipeCode = (order.RecipeName != null && order.RecipeCode != null) ? $"{order.RecipeCode} - {order.RecipeName}" : order.RecipeCode,
-                RecipeVersion = order.RecipeVersion,
-                Shift = order.Shift,
-                PlannedStart = order.PlannedStart,
-                PlannedEnd = order.PlannedEnd,
-                Quantity = order.Quantity,
-                UnitOfMeasurement = order.UnitOfMeasurement,
-                LotNumber = order.LotNumber,
-                timestamp = order.timestamp,
-                Plant = order.Plant,
-                Shopfloor = order.Shopfloor,
-                ProcessArea = order.ProcessArea,
-                Status = (int)order.Status,
-                ItemName = order.ItemName,
-                RecipeName = order.RecipeName,
-                RecipeDetailsId = order.RecipeDetailsId,
-                CurrentBatch = order.CurrentBatch,
-                TotalBatches = order.TotalBatches,
-                ProductQuantity = order.ProductQuantity
-            };
+            var result = ApiResponse<ProductionOrderDto>.Success(new ProductionOrderDto
+            {
+                ProductionOrderId = o.ProductionOrderId,
+                ProductionLine = o.ProductionLine,
+                ProductionOrderNumber = o.ProductionOrderNumber,
+                ProductCode = o.ProductCode,
+                ProductName = o.ItemName,
+                RecipeCode = o.RecipeCode,
+                RecipeName = o.RecipeName,
+                RecipeVersion = o.RecipeVersion?.ToString() ?? "",
+                Shift = o.Shift,
+                PlannedStart = o.PlannedStart,
+                PlannedEnd = o.PlannedEnd,
+                Quantity = o.Quantity,
+                UnitOfMeasurement = o.UnitOfMeasurement,
+                LotNumber = o.LotNumber,
+                ProcessArea = o.ProcessArea,
+                Status = o.Status != null ? Convert.ToInt32(o.Status) : null,
+                CurrentBatch = o.CurrentBatch?.ToString() ?? "0",
+                TotalBatches = o.TotalBatches != null ? Convert.ToInt32(o.TotalBatches) : 0
+            });
 
-            return new {
-                success = true,
-                message = "Lấy chi tiết đơn hàng thành công",
-                data
-            };
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
     }
 }

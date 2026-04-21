@@ -1,16 +1,23 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using System.Linq;
+using System.Collections.Generic;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.Materials;
 
 namespace FactoryManagementSystem.Services
 {
     public class MaterialsService : IMaterialsService
     {
         private readonly IConfiguration _config;
+        private readonly IRedisCacheService _cache;
 
-        public MaterialsService(IConfiguration config)
+        public MaterialsService(IConfiguration config, IRedisCacheService cache)
         {
             _config = config;
+            _cache = cache;
         }
 
         private IDbConnection Connection => new SqlConnection(_config.GetConnectionString("DefaultConnection"));
@@ -49,31 +56,39 @@ namespace FactoryManagementSystem.Services
             return rawInput.Split(',').Select(x => x.Trim()).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
         }
 
-        public async Task<object> GetProductionOrdersAsync(IQueryCollection query)
+        public async Task<ApiResponse<IEnumerable<MaterialProductionOrderDto>>> GetProductionOrdersAsync(IQueryCollection query)
         {
+            string queryStr = string.Join("_", query.Select(kv => kv.Key + "=" + kv.Value));
+            string cacheKey = $"materials:orders:{queryStr}";
+            var cached = await _cache.GetAsync<ApiResponse<IEnumerable<MaterialProductionOrderDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             var p = new DynamicParameters();
             var where = new List<string>();
             ApplyDateFilter(query, p, where, "");
             var whereClause = where.Any() ? "WHERE " + string.Join(" AND ", where) : "";
 
             var sql = $@"
-                SELECT DISTINCT productionOrderNumber
+                SELECT DISTINCT productionOrderNumber AS ProductionOrderNumber
                 FROM MESMaterialConsumption WITH (NOLOCK)
                 {whereClause}
-                ORDER BY productionOrderNumber ASC
+                ORDER BY ProductionOrderNumber ASC
             ";
 
             using var conn = Connection;
-            var rows = await conn.QueryAsync<string>(sql, p);
-            return new {
-                success = true,
-                message = "Success",
-                data = rows.Select(r => new { productionOrderNumber = r })
-            };
+            var rows = await conn.QueryAsync<MaterialProductionOrderDto>(sql, p);
+            var result = ApiResponse<IEnumerable<MaterialProductionOrderDto>>.Success(rows);
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
-        public async Task<object> GetBatchCodesAsync(string? productionOrderNumber, IQueryCollection query)
+        public async Task<ApiResponse<IEnumerable<MaterialBatchDto>>> GetBatchCodesAsync(string? productionOrderNumber, IQueryCollection query)
         {
+            string queryStr = string.Join("_", query.Select(kv => kv.Key + "=" + kv.Value));
+            string cacheKey = $"materials:batches:{productionOrderNumber}:{queryStr}";
+            var cached = await _cache.GetAsync<ApiResponse<IEnumerable<MaterialBatchDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             var p = new DynamicParameters();
             var extraWhere = new List<string>();
 
@@ -87,7 +102,7 @@ namespace FactoryManagementSystem.Services
             var extraStr = extraWhere.Any() ? "AND " + string.Join(" AND ", extraWhere) : "";
 
             var sql = $@"
-                SELECT batchCode FROM (
+                SELECT batchCode AS BatchCode FROM (
                     SELECT DISTINCT
                         CASE WHEN batchCode IS NULL OR LTRIM(RTRIM(batchCode)) = '' THEN NULL ELSE batchCode END AS batchCode,
                         CASE WHEN batchCode IS NULL OR LTRIM(RTRIM(batchCode)) = '' THEN 0 ELSE 1 END AS sort_grp
@@ -99,16 +114,19 @@ namespace FactoryManagementSystem.Services
             ";
 
             using var conn = Connection;
-            var rows = await conn.QueryAsync<string>(sql, p);
-            return new {
-                success = true,
-                message = "Success",
-                data = rows.Select(r => new { batchCode = r })
-            };
+            var rows = await conn.QueryAsync<MaterialBatchDto>(sql, p);
+            var result = ApiResponse<IEnumerable<MaterialBatchDto>>.Success(rows);
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
-        public async Task<object> GetIngredientsAsync(string? productionOrderNumber, string? batchCode, IQueryCollection query)
+        public async Task<ApiResponse<IEnumerable<MaterialIngredientDto>>> GetIngredientsAsync(string? productionOrderNumber, string? batchCode, IQueryCollection query)
         {
+            string queryStr = string.Join("_", query.Select(kv => kv.Key + "=" + kv.Value));
+            string cacheKey = $"materials:ingredients:{productionOrderNumber}:{batchCode}:{queryStr}";
+            var cached = await _cache.GetAsync<ApiResponse<IEnumerable<MaterialIngredientDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             var p = new DynamicParameters();
             var where = new List<string> { "ingredientCode IS NOT NULL", "LTRIM(RTRIM(ingredientCode)) <> ''" };
 
@@ -127,23 +145,26 @@ namespace FactoryManagementSystem.Services
             ApplyDateFilter(query, p, where, "");
 
             var sql = $@"
-                SELECT DISTINCT ingredientCode
+                SELECT DISTINCT ingredientCode AS IngredientCode
                 FROM MESMaterialConsumption WITH (NOLOCK)
                 WHERE {string.Join(" AND ", where)}
-                ORDER BY ingredientCode ASC
+                ORDER BY IngredientCode ASC
             ";
 
             using var conn = Connection;
-            var rows = await conn.QueryAsync<string>(sql, p);
-            return new {
-                success = true,
-                message = "Success",
-                data = rows.Select(r => new { ingredientCode = r })
-            };
+            var rows = await conn.QueryAsync<MaterialIngredientDto>(sql, p);
+            var result = ApiResponse<IEnumerable<MaterialIngredientDto>>.Success(rows);
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
-        public async Task<object> GetShiftsAsync(IQueryCollection query)
+        public async Task<ApiResponse<IEnumerable<MaterialSimpleDto>>> GetShiftsAsync(IQueryCollection query)
         {
+            string queryStr = string.Join("_", query.Select(kv => kv.Key + "=" + kv.Value));
+            string cacheKey = $"materials:shifts:{queryStr}";
+            var cached = await _cache.GetAsync<ApiResponse<IEnumerable<MaterialSimpleDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             var p = new DynamicParameters();
             var dateWhere = new List<string>();
             ApplyDateFilter(query, p, dateWhere, "mmc");
@@ -152,7 +173,7 @@ namespace FactoryManagementSystem.Services
             if (dateWhere.Any())
             {
                 sql = $@"
-                    SELECT DISTINCT po.Shift
+                    SELECT DISTINCT po.Shift AS Value
                     FROM ProductionOrders po WITH (NOLOCK)
                     INNER JOIN MESMaterialConsumption mmc WITH (NOLOCK)
                       ON po.ProductionOrderNumber = mmc.productionOrderNumber
@@ -164,7 +185,7 @@ namespace FactoryManagementSystem.Services
             else
             {
                 sql = @"
-                    SELECT DISTINCT Shift
+                    SELECT DISTINCT Shift AS Value
                     FROM ProductionOrders WITH (NOLOCK)
                     WHERE Shift IS NOT NULL AND LTRIM(RTRIM(Shift)) <> ''
                     ORDER BY Shift ASC
@@ -172,28 +193,40 @@ namespace FactoryManagementSystem.Services
             }
 
             using var conn = Connection;
-            var rows = await conn.QueryAsync<string>(sql, p);
-            return new {
-                success = true,
-                message = "Success",
-                data = rows.Select(r => new { shift = r })
-            };
+            var rows = await conn.QueryAsync<MaterialSimpleDto>(sql, p);
+            var result = ApiResponse<IEnumerable<MaterialSimpleDto>>.Success(rows);
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
-        public async Task<object> SearchAsync(IQueryCollection query, int page, int pageSize)
+        public async Task<ApiResponse<PagedResponse<MaterialConsumptionDto>>> SearchAsync(IQueryCollection query, int page, int pageSize)
         {
             var pageNum = Math.Max(page, 1);
             var pageLimit = Math.Max(pageSize, 1);
             var offset = (pageNum - 1) * pageLimit;
 
+            string queryStr = string.Join("_", query.Select(kv => kv.Key + "=" + kv.Value));
+            string cacheKey = $"materials:search:{queryStr}:{page}:{pageSize}";
+            var cached = await _cache.GetAsync<ApiResponse<PagedResponse<MaterialConsumptionDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             var p = new DynamicParameters();
             var whereClause = BuildSearchWhere(query, p);
 
             var sql = $@"
-                SELECT mmc.*, po.Shift AS shift, po.ProductionLine AS productionLine
+                SELECT 
+                    mmc.id AS Id, mmc.productionOrderNumber AS ProductionOrderNumber, mmc.batchCode AS BatchCode,
+                    mmc.quantity AS Quantity, mmc.ingredientCode AS IngredientCode, pm.ItemName AS IngredientName,
+                    mmc.lot AS Lot, mmc.unitOfMeasurement AS UnitOfMeasurement, mmc.datetime AS Datetime,
+                    mmc.operator_ID AS Operator_ID, mmc.supplyMachine AS SupplyMachine,
+                    mmc.respone AS Respone, mmc.status AS Status, mmc.status1 AS Status1,
+                    mmc.request AS Request, mmc.count AS Count, mmc.timestamp AS Timestamp,
+                    po.Shift AS Shift, po.ProductionLine AS ProductionLine
                 FROM MESMaterialConsumption mmc WITH (NOLOCK)
                 LEFT JOIN ProductionOrders po WITH (NOLOCK)
                   ON mmc.productionOrderNumber = po.ProductionOrderNumber
+                LEFT JOIN ProductMasters pm WITH (NOLOCK)
+                  ON pm.ItemCode = mmc.ingredientCode
                 {whereClause}
                 ORDER BY mmc.datetime DESC
                 OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
@@ -203,12 +236,14 @@ namespace FactoryManagementSystem.Services
             p.Add("limit", pageLimit);
 
             using var conn = Connection;
-            var rows = await conn.QueryAsync(sql, p);
-            return new {
-                success = true,
-                message = "Success",
-                data = rows
-            };
+            var dtos = (await conn.QueryAsync<MaterialConsumptionDto>(sql, p)).ToList();
+            
+            var result = ApiResponse<PagedResponse<MaterialConsumptionDto>>.Success(
+                new PagedResponse<MaterialConsumptionDto>(dtos, dtos.Count, pageNum, pageLimit)
+            );
+
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
         private string BuildSearchWhere(IQueryCollection query, DynamicParameters p)
@@ -250,12 +285,12 @@ namespace FactoryManagementSystem.Services
             if (ingValues.Any())
             {
                 var conditions = new List<string>();
-                if (ingValues.Contains("NULL")) conditions.Add("ingredientCode IS NULL");
+                if (ingValues.Contains("NULL")) conditions.Add("mmc.ingredientCode IS NULL");
                 var real = ingValues.Where(v => v != "NULL").ToList();
                 for (int i = 0; i < real.Count; i++)
                 {
                     p.Add($"ing{i}", $"%{real[i]}%");
-                    conditions.Add($"ingredientCode LIKE @ing{i}");
+                    conditions.Add("mmc.ingredientCode LIKE @ing" + i);
                 }
                 if (conditions.Any()) where.Add($"({string.Join(" OR ", conditions)})");
             }
@@ -290,13 +325,18 @@ namespace FactoryManagementSystem.Services
             return where.Any() ? "WHERE " + string.Join(" AND ", where) : "";
         }
 
-        public async Task<object> GetStatsSearchAsync(IQueryCollection query)
+        public async Task<ApiResponse<object>> GetStatsSearchAsync(IQueryCollection query)
         {
+            string queryStr = string.Join("_", query.Select(kv => kv.Key + "=" + kv.Value));
+            string cacheKey = $"materials:stats:{queryStr}";
+            var cached = await _cache.GetAsync<ApiResponse<object>>(cacheKey);
+            if (cached != null) return cached;
+
             var p = new DynamicParameters();
             var whereClause = BuildSearchWhere(query, p);
 
             var sql = $@"
-                SELECT COUNT(*) AS total
+                SELECT COUNT(*) AS Total
                 FROM MESMaterialConsumption mmc WITH (NOLOCK)
                 LEFT JOIN ProductionOrders po WITH (NOLOCK)
                   ON mmc.productionOrderNumber = po.ProductionOrderNumber
@@ -305,11 +345,9 @@ namespace FactoryManagementSystem.Services
 
             using var conn = Connection;
             var total = await conn.ExecuteScalarAsync<int>(sql, p);
-            return new {
-                success = true,
-                message = "Success",
-                data = new { total }
-            };
+            var result = ApiResponse<object>.Success(new { Total = total });
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(5));
+            return result;
         }
     }
 }

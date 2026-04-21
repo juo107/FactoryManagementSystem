@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using FactoryManagementSystem.Services;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.Materials;
 
 namespace FactoryManagementSystem.Controllers
 {
@@ -15,7 +17,7 @@ namespace FactoryManagementSystem.Controllers
         }
 
         [HttpGet("production-orders")]
-        public async Task<IActionResult> GetProductionOrders()
+        public async Task<ActionResult<ApiResponse<IEnumerable<MaterialProductionOrderDto>>>> GetProductionOrders()
         {
             try
             {
@@ -24,12 +26,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("batch-codes")]
-        public async Task<IActionResult> GetBatchCodes(string? productionOrderNumber = "")
+        public async Task<ActionResult<ApiResponse<IEnumerable<MaterialBatchDto>>>> GetBatchCodes(string? productionOrderNumber = "")
         {
             try
             {
@@ -38,12 +40,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("ingredients")]
-        public async Task<IActionResult> GetIngredients(string? productionOrderNumber, string? batchCode)
+        public async Task<ActionResult<ApiResponse<IEnumerable<MaterialIngredientDto>>>> GetIngredients(string? productionOrderNumber, string? batchCode)
         {
             try
             {
@@ -52,12 +54,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("shifts")]
-        public async Task<IActionResult> GetShifts()
+        public async Task<ActionResult<ApiResponse<IEnumerable<MaterialSimpleDto>>>> GetShifts()
         {
             try
             {
@@ -66,12 +68,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("search")]
-        public async Task<IActionResult> Search(int page = 1, int pageSize = 100)
+        public async Task<ActionResult<ApiResponse<PagedResponse<MaterialConsumptionDto>>>> Search(int page = 1, int pageSize = 100)
         {
             try
             {
@@ -80,12 +82,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("stats/search")]
-        public async Task<IActionResult> StatsSearch()
+        public async Task<ActionResult<ApiResponse<object>>> StatsSearch()
         {
             try
             {
@@ -94,7 +96,7 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
     }

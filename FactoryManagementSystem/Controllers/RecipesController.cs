@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using FactoryManagementSystem.Services;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.Recipes;
 
 namespace FactoryManagementSystem.Controllers
 {
@@ -15,7 +17,7 @@ namespace FactoryManagementSystem.Controllers
         }
 
         [HttpGet("stats/search")]
-        public async Task<IActionResult> GetStatsSearch(string? search, string? status, string? statuses)
+        public async Task<ActionResult<ApiResponse<object>>> GetStatsSearch(string? search, string? status, string? statuses)
         {
             try
             {
@@ -24,12 +26,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("search")]
-        public async Task<IActionResult> Search(int page = 1, int limit = 20, string? search = null, string? status = null, string? statuses = null)
+        public async Task<ActionResult<ApiResponse<PagedResponse<RecipeDto>>>> Search(int page = 1, int limit = 20, string? search = null, string? status = null, string? statuses = null)
         {
             try
             {
@@ -38,7 +40,7 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, error = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
     }

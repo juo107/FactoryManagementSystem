@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using FactoryManagementSystem.Services;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.Products;
 
 namespace FactoryManagementSystem.Controllers
 {
@@ -15,7 +17,7 @@ namespace FactoryManagementSystem.Controllers
         }
 
         [HttpGet("types")]
-        public async Task<IActionResult> GetTypes()
+        public async Task<ActionResult<ApiResponse<IEnumerable<string>>>> GetTypes()
         {
             try
             {
@@ -24,12 +26,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("search")]
-        public async Task<IActionResult> Search(
+        public async Task<ActionResult<ApiResponse<PagedResponse<ProductDto>>>> Search(
             string? q = "",
             string? status = "",
             string? statuses = "",
@@ -45,12 +47,12 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("stats/search")]
-        public async Task<IActionResult> StatsSearch(
+        public async Task<ActionResult<ApiResponse<object>>> StatsSearch(
             string? q = "",
             string? status = "",
             string? statuses = "",
@@ -64,22 +66,21 @@ namespace FactoryManagementSystem.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
 
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetById(string id)
+        public async Task<ActionResult<ApiResponse<ProductDto>>> GetById(string id)
         {
             try
             {
                 var result = await _service.GetByIdAsync(id);
-                if (result == null) return NotFound(new { error = "Not found" });
                 return Ok(result);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = ex.Message });
+                return StatusCode(500, ApiResponse<object>.Error(ex.Message));
             }
         }
     }

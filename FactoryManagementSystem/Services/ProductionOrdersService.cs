@@ -1,22 +1,35 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Collections.Generic;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using FactoryManagementSystem.Interfaces;
+using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.ProductionOrders;
 
 namespace FactoryManagementSystem.Services
 {
     public class ProductionOrdersService : IProductionOrdersService
     {
         private readonly IConfiguration _config;
+        private readonly IRedisCacheService _cache;
 
-        public ProductionOrdersService(IConfiguration config)
+        public ProductionOrdersService(IConfiguration config, IRedisCacheService cache)
         {
             _config = config;
+            _cache = cache;
         }
 
         private IDbConnection Connection => new SqlConnection(_config.GetConnectionString("DefaultConnection"));
 
-        public async Task<object> GetFiltersAsync(string dateFrom, string dateTo)
+        public async Task<ApiResponse<OrderFiltersDto>> GetFiltersAsync(string dateFrom, string dateTo)
         {
+            string cacheKey = $"production_orders:filters:{dateFrom}:{dateTo}";
+            var cachedData = await _cache.GetAsync<ApiResponse<OrderFiltersDto>>(cacheKey);
+            if (cachedData != null) return cachedData;
+
             using var conn = Connection;
             var where = new List<string>();
             var p = new DynamicParameters();
@@ -44,15 +57,22 @@ namespace FactoryManagementSystem.Services
             ";
 
             using var multi = await conn.QueryMultipleAsync(sql, p);
-            return new
+            var result = ApiResponse<OrderFiltersDto>.Success(new OrderFiltersDto
             {
-                processAreas = await multi.ReadAsync<string>(),
-                shifts = await multi.ReadAsync<string>()
-            };
+                ProcessAreas = await multi.ReadAsync<string>(),
+                Shifts = await multi.ReadAsync<string>()
+            });
+
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
-        public async Task<object> GetFiltersV2Async(string dateFrom, string dateTo)
+        public async Task<ApiResponse<OrderFiltersDto>> GetFiltersV2Async(string dateFrom, string dateTo)
         {
+            string cacheKey = $"production_orders:filters_v2:{dateFrom}:{dateTo}";
+            var cachedData = await _cache.GetAsync<ApiResponse<OrderFiltersDto>>(cacheKey);
+            if (cachedData != null) return cachedData;
+
             using var conn = Connection;
             var where = new List<string>();
             var p = new DynamicParameters();
@@ -84,15 +104,18 @@ namespace FactoryManagementSystem.Services
                 ORDER BY ProductionOrderNumber DESC;";
 
             using var multi = await conn.QueryMultipleAsync(sql, p);
-            return new
+            var result = ApiResponse<OrderFiltersDto>.Success(new OrderFiltersDto
             {
-                processAreas = await multi.ReadAsync<string>(),
-                shifts = await multi.ReadAsync<string>(),
-                productionOrderNumbers = await multi.ReadAsync<string>()
-            };
+                ProcessAreas = await multi.ReadAsync<string>(),
+                Shifts = await multi.ReadAsync<string>(),
+                ProductionOrderNumbers = await multi.ReadAsync<string>()
+            });
+
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
-        public async Task<object> GetStatsSearchAsync(string searchQuery, string dateFrom, string dateTo, string processAreas, string shifts, string statuses)
+        public async Task<ApiResponse<OrderStatsDto>> GetStatsSearchAsync(string searchQuery, string dateFrom, string dateTo, string processAreas, string shifts, string statuses)
         {
             using var conn = Connection;
             var where = new List<string>();
@@ -162,20 +185,16 @@ namespace FactoryManagementSystem.Services
             int inProgress = stats.inProgress ?? 0;
             int completed = stats.completed ?? 0;
 
-            return new
+            return ApiResponse<OrderStatsDto>.Success(new OrderStatsDto
             {
-                success = true,
-                stats = new
-                {
-                    total,
-                    inProgress,
-                    completed,
-                    stopped = total - inProgress
-                }
-            };
+                Total = total,
+                InProgress = inProgress,
+                Completed = completed,
+                Stopped = total - inProgress
+            });
         }
 
-        public async Task<object> GetStatsSearchV2Async(string searchQuery, string dateFrom, string dateTo, string processAreas, string shifts, string statuses, string pos, string batchIds)
+        public async Task<ApiResponse<OrderStatsDto>> GetStatsSearchV2Async(string searchQuery, string dateFrom, string dateTo, string processAreas, string shifts, string statuses, string pos, string batchIds)
         {
             using var conn = Connection;
             var where = new List<string>();
@@ -254,21 +273,16 @@ namespace FactoryManagementSystem.Services
             ";
 
             var stats = await conn.QueryFirstAsync(sql, p);
-            return new
+            return ApiResponse<OrderStatsDto>.Success(new OrderStatsDto
             {
-                success = true,
-                message = "Success",
-                stats = new
-                {
-                    total = (int)(stats.total ?? 0),
-                    inProgress = (int)(stats.inProgress ?? 0),
-                    completed = (int)(stats.completed ?? 0),
-                    stopped = (int)(stats.stopped ?? 0)
-                }
-            };
+                Total = (int)(stats.total ?? 0),
+                InProgress = (int)(stats.inProgress ?? 0),
+                Completed = (int)(stats.completed ?? 0),
+                Stopped = (int)(stats.stopped ?? 0)
+            });
         }
 
-        public async Task<object> SearchAsync(string? searchQuery, string? dateFrom, string? dateTo, string? processAreas, string? shifts, string? statuses, int page, int limit, int total)
+        public async Task<ApiResponse<PagedResponse<ProductionOrderDto>>> SearchAsync(string? searchQuery, string? dateFrom, string? dateTo, string? processAreas, string? shifts, string? statuses, int page, int limit, int total)
         {
             using var conn = Connection;
             page = Math.Max(1, page);
@@ -347,7 +361,7 @@ namespace FactoryManagementSystem.Services
                     po.UnitOfMeasurement, po.Plant, po.Shopfloor, po.Shift,
                     pm.ItemName, rd.RecipeName,
                     CASE WHEN mmc.ProductionOrderNumber IS NOT NULL THEN 1 ELSE 0 END AS Status,
-                    ISNULL(mmc.MaxBatch, 0) AS CurrentBatch,
+                    mmc.MaxBatch AS CurrentBatch,
                     ISNULL(b.TotalBatches, 0) AS TotalBatches
                 FROM ProductionOrders po
                 LEFT JOIN ProductMasters pm ON po.ProductCode = pm.ItemCode
@@ -367,33 +381,17 @@ namespace FactoryManagementSystem.Services
                 OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
             ";
 
-            var result = await conn.QueryAsync(sqlQuery, p);
-            var data = result.Select(o => new
-            {
-                ProductionOrderId = o.ProductionOrderId,
-                ProductionOrderNumber = o.ProductionOrderNumber,
-                ProductionLine = o.ProductionLine,
-                ProductCode = o.ItemName != null ? $"{o.ProductCode} - {o.ItemName}" : o.ProductCode,
-                RecipeCode = (o.RecipeName != null && o.RecipeCode != null) ? $"{o.RecipeCode} - {o.RecipeName}" : o.RecipeCode,
-                RecipeVersion = o.RecipeVersion,
-                LotNumber = o.LotNumber,
-                ProcessArea = o.ProcessArea,
-                PlannedStart = o.PlannedStart,
-                PlannedEnd = o.PlannedEnd,
-                Quantity = o.Quantity,
-                UnitOfMeasurement = o.UnitOfMeasurement,
-                Plant = o.Plant,
-                Shopfloor = o.Shopfloor,
-                Shift = o.Shift,
-                Status = o.Status,
-                CurrentBatch = o.CurrentBatch,
-                TotalBatches = o.TotalBatches
-            });
+            p.Add("offset", offset);
+            p.Add("limit", limit);
 
-            return new { success = true, message = "Success", total, totalPages = (int)Math.Ceiling((double)total / limit), page, limit, data };
+            var dtos = await conn.QueryAsync<ProductionOrderDto>(sqlQuery, p);
+
+            return ApiResponse<PagedResponse<ProductionOrderDto>>.Success(
+                new PagedResponse<ProductionOrderDto>(dtos, total, page, limit)
+            );
         }
 
-        public async Task<object> SearchV2Async(string? searchQuery, string? dateFrom, string? dateTo, string? processAreas, string? shifts, string? statuses, string? pos, string? batchIds, int page, int limit, int total)
+        public async Task<ApiResponse<PagedResponse<ProductionOrderDto>>> SearchV2Async(string? searchQuery, string? dateFrom, string? dateTo, string? processAreas, string? shifts, string? statuses, string? pos, string? batchIds, int page, int limit, int total)
         {
             using var conn = Connection;
             page = Math.Max(1, page);
@@ -483,7 +481,7 @@ namespace FactoryManagementSystem.Services
                     po.RecipeVersion, po.LotNumber, po.ProcessArea, po.PlannedStart, po.PlannedEnd, po.Quantity, 
                     po.UnitOfMeasurement, po.Plant, po.Shopfloor, po.Shift, po.Status,
                     pm.ItemName, rd.RecipeName,
-                    ISNULL(mmc.MaxBatch, 0) AS CurrentBatch, 
+                    mmc.MaxBatch AS CurrentBatch, 
                     ISNULL(b_cnt.TotalBatches, 0) AS TotalBatches
                 FROM ProductionOrders po
                 LEFT JOIN ProductMasters pm ON po.ProductCode = pm.ItemCode
@@ -502,48 +500,28 @@ namespace FactoryManagementSystem.Services
                 ORDER BY po.ProductionOrderId DESC
                 OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY";
 
-            var rows = (await conn.QueryAsync(sqlQuery, p)).ToList();
+            var rows = (await conn.QueryAsync<ProductionOrderDto>(sqlQuery, p)).ToList();
 
             // Fetch batches for each ProductionOrderId
-            var poIds = rows.Select(r => (int)r.ProductionOrderId).Distinct().ToList();
-            var batchesByPoId = new Dictionary<int, List<object>>();
-
+            var poIds = rows.Select(r => r.ProductionOrderId).Distinct().ToList();
             if (poIds.Any())
             {
                 var batchesSql = "SELECT BatchId, ProductionOrderId, BatchNumber, Quantity, UnitOfMeasurement, Status FROM Batches WHERE ProductionOrderId IN @poIds";
-                var batchesResult = await conn.QueryAsync(batchesSql, new { poIds });
-                foreach (var b in batchesResult)
+                var batchesResult = await conn.QueryAsync<BatchDto>(batchesSql, new { poIds });
+                var batchesByPoId = batchesResult.GroupBy(b => b.ProductionOrderId).ToDictionary(g => g.Key, g => g.ToList());
+                
+                foreach (var po in rows)
                 {
-                    int poId = (int)b.ProductionOrderId;
-                    if (!batchesByPoId.ContainsKey(poId)) batchesByPoId[poId] = new List<object>();
-                    batchesByPoId[poId].Add(b);
+                    if (batchesByPoId.TryGetValue(po.ProductionOrderId, out var batches))
+                    {
+                        po.Batches = batches;
+                    }
                 }
             }
 
-            var result = rows.Select(o => new
-            {
-                ProductionOrderId = o.ProductionOrderId,
-                ProductionOrderNumber = o.ProductionOrderNumber,
-                ProductionLine = o.ProductionLine,
-                ProductCode = o.ItemName != null ? $"{o.ProductCode} - {o.ItemName}" : o.ProductCode,
-                RecipeCode = (o.RecipeName != null && o.RecipeCode != null) ? $"{o.RecipeCode} - {o.RecipeName}" : o.RecipeCode,
-                RecipeVersion = o.RecipeVersion,
-                LotNumber = o.LotNumber,
-                ProcessArea = o.ProcessArea,
-                PlannedStart = o.PlannedStart,
-                PlannedEnd = o.PlannedEnd,
-                Quantity = o.Quantity,
-                UnitOfMeasurement = o.UnitOfMeasurement,
-                Plant = o.Plant,
-                Shopfloor = o.Shopfloor,
-                Shift = o.Shift,
-                Status = (int)o.Status,
-                CurrentBatch = o.CurrentBatch,
-                TotalBatches = o.TotalBatches,
-                batches = batchesByPoId.ContainsKey((int)o.ProductionOrderId) ? batchesByPoId[(int)o.ProductionOrderId] : new List<object>()
-            });
-
-            return new { success = true, message = "Success", total, totalPages = (int)Math.Ceiling((double)total / limit), page, limit, data = result };
+            return ApiResponse<PagedResponse<ProductionOrderDto>>.Success(
+                new PagedResponse<ProductionOrderDto>(rows, total, page, limit)
+            );
         }
     }
 }
