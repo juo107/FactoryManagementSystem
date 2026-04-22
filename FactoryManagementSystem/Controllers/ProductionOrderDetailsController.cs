@@ -1,7 +1,8 @@
-using Microsoft.AspNetCore.Mvc;
-using FactoryManagementSystem.Interfaces;
 using FactoryManagementSystem.DTOs.Common;
+using FactoryManagementSystem.DTOs.Materials;
 using FactoryManagementSystem.DTOs.ProductionOrders;
+using FactoryManagementSystem.Interfaces;
+using Microsoft.AspNetCore.Mvc;
 
 namespace FactoryManagementSystem.Controllers
 {
@@ -69,11 +70,13 @@ namespace FactoryManagementSystem.Controllers
             [FromQuery] string productionOrderNumber,
             [FromQuery] int page = 1,
             [FromQuery] int limit = 20,
-            [FromBody] List<dynamic>? batchCodesWithMaterials = null)
+            [FromBody] List<BatchFilterDto>? batchCodesWithMaterials = null)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(productionOrderNumber)) return BadRequest(ApiResponse<object>.Error("productionOrderNumber là bắt buộc"));
+                if (string.IsNullOrWhiteSpace(productionOrderNumber))
+                    return BadRequest(ApiResponse<object>.Error("productionOrderNumber là bắt buộc"));
+
                 var result = await _service.GetMaterialConsumptionsExcludeBatchesAsync(productionOrderNumber, page, limit, batchCodesWithMaterials);
                 return Ok(result);
             }

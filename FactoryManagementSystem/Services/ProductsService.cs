@@ -51,7 +51,7 @@ namespace FactoryManagementSystem.Services
                     p.ProductMasterId, p.ItemCode, p.ItemName, p.Item_Type, p.[Group], p.Category, p.Brand, 
                     p.BaseUnit, p.InventoryUnit, p.Item_Status, p.[timestamp] as Timestamp,
                     JSON_QUERY((
-                        SELECT m.MHUTypeId, m.FromUnit, m.ToUnit, m.Conversion 
+                        SELECT m.MHUTypeId AS MHUTypeId, m.FromUnit AS FromUnit, m.ToUnit AS ToUnit, m.Conversion AS Conversion 
                         FROM MHUTypes m WHERE m.ProductMasterId = p.ProductMasterId 
                         FOR JSON PATH
                     )) AS MhuTypesJson
@@ -69,7 +69,7 @@ namespace FactoryManagementSystem.Services
             {
                 if (!string.IsNullOrEmpty(item.MhuTypesJson))
                 {
-                    item.MhuTypes = JsonSerializer.Deserialize<List<MhuTypeDto>>(item.MhuTypesJson) ?? new();
+                    item.MhuTypes = JsonSerializer.Deserialize<List<MhuTypeDto>>(item.MhuTypesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
                 }
             }
 
@@ -94,7 +94,7 @@ namespace FactoryManagementSystem.Services
                     p.ProductMasterId, p.ItemCode, p.ItemName, p.Item_Type, p.[Group], p.Category, p.Brand, 
                     p.BaseUnit, p.InventoryUnit, p.Item_Status, p.[timestamp] as Timestamp,
                     JSON_QUERY((
-                        SELECT m.MHUTypeId, m.FromUnit, m.ToUnit, m.Conversion 
+                        SELECT m.MHUTypeId AS MHUTypeId, m.FromUnit AS FromUnit, m.ToUnit AS ToUnit, m.Conversion AS Conversion 
                         FROM MHUTypes m WHERE m.ProductMasterId = p.ProductMasterId 
                         FOR JSON PATH
                     )) AS MhuTypesJson
@@ -108,7 +108,7 @@ namespace FactoryManagementSystem.Services
 
             if (!string.IsNullOrEmpty(product.MhuTypesJson))
             {
-                product.MhuTypes = JsonSerializer.Deserialize<List<MhuTypeDto>>(product.MhuTypesJson) ?? new();
+                product.MhuTypes = JsonSerializer.Deserialize<List<MhuTypeDto>>(product.MhuTypesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
             }
 
             return ApiResponse<ProductDto>.Success(product);

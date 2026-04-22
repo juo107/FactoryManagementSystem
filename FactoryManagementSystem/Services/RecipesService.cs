@@ -98,7 +98,21 @@ namespace FactoryManagementSystem.Services
             var total = await conn.ExecuteScalarAsync<int>(countSql, parameters);
             var totalPages = total > 0 ? (int)Math.Ceiling(total / (double)limit) : 1;
 
-            var dataSql = $@"SELECT * FROM RecipeDetails WHERE {where} ORDER BY RecipeDetailsId DESC OFFSET @skip ROWS FETCH NEXT @limit ROWS ONLY";
+            var dataSql = $@"
+                SELECT 
+                    rd.RecipeDetailsId AS RecipeDetailsId, 
+                    rd.RecipeCode AS RecipeCode, 
+                    rd.RecipeName AS RecipeName, 
+                    rd.RecipeStatus AS RecipeStatus, 
+                    rd.Version AS Version, 
+                    rd.ProductCode AS ProductCode, 
+                    pm.ItemName AS ProductName,
+                    rd.timestamp AS Timestamp
+                FROM RecipeDetails rd 
+                LEFT JOIN ProductMasters pm ON pm.ItemCode = rd.ProductCode 
+                WHERE {where} 
+                ORDER BY rd.RecipeDetailsId DESC 
+                OFFSET @skip ROWS FETCH NEXT @limit ROWS ONLY";
             parameters.Add("skip", skip);
             parameters.Add("limit", limit);
 
@@ -116,23 +130,78 @@ namespace FactoryManagementSystem.Services
             if (cached != null) return cached;
 
             using var conn = Connection;
-            var recipe = await conn.QueryFirstOrDefaultAsync<RecipeDto>("SELECT * FROM RecipeDetails WHERE RecipeDetailsId = @id", new { id });
+            var recipeSql = @"
+                SELECT rd.*, pm.ItemName AS ProductName 
+                FROM RecipeDetails rd 
+                LEFT JOIN ProductMasters pm ON pm.ItemCode = rd.ProductCode 
+                WHERE rd.RecipeDetailsId = @id";
+            var recipe = await conn.QueryFirstOrDefaultAsync<RecipeDto>(recipeSql, new { id });
             if (recipe == null) return ApiResponse<RecipeDetailResponseDto>.Error("Recipe not found", "404");
 
-            var processes = (await conn.QueryAsync("SELECT * FROM Processes WHERE RecipeDetailsId = @id", new { id })).ToList();
-            var processIds = processes.Select(p => (int)p.ProcessId).ToList();
+            var processes = (await conn.QueryAsync<ProcessDto>(@"
+                SELECT 
+                    ProcessId, 
+                    ProcessCode, 
+                    ProcessName, 
+                    Duration, 
+                    DurationUoM 
+                FROM Processes 
+                WHERE RecipeDetailsId = @id", new { id })).ToList();
+            
+            var processIds = processes.Select(p => p.ProcessId).ToList();
 
-            IEnumerable<dynamic> ingredients = new List<dynamic>();
-            if (processIds.Any()) { ingredients = await conn.QueryAsync(@"SELECT i.*, pm.ItemName FROM Ingredients i LEFT JOIN ProductMasters pm ON i.IngredientCode = pm.ItemCode WHERE i.ProcessId IN @processIds", new { processIds }); }
+            var ingredients = new List<IngredientDto>();
+            if (processIds.Any()) { 
+                ingredients = (await conn.QueryAsync<IngredientDto>(@"
+                    SELECT 
+                        i.IngredientId AS IngredientId, 
+                        i.ProcessId AS ProcessId, 
+                        i.IngredientCode AS IngredientCode, 
+                        i.Quantity AS Quantity, 
+                        i.UnitOfMeasurement AS UnitOfMeasurement, 
+                        pm.ItemName AS ItemName 
+                    FROM Ingredients i 
+                    LEFT JOIN ProductMasters pm ON i.IngredientCode = pm.ItemCode 
+                    WHERE i.ProcessId IN @processIds", new { processIds })).ToList(); 
+            }
 
-            IEnumerable<dynamic> products = new List<dynamic>();
-            if (recipe.ProductCode != null) { products = await conn.QueryAsync(@"SELECT p.*, pm.ItemName FROM Products p LEFT JOIN ProductMasters pm ON p.ProductCode = pm.ItemCode WHERE p.ProductCode = @productCode", new { productCode = (string)recipe.ProductCode }); }
+            var products = (await conn.QueryAsync<RecipeProductDto>(@"
+                SELECT 
+                    p.ProductId AS ProductId, 
+                    p.ProcessId AS ProcessId, 
+                    p.ProductCode AS ProductCode, 
+                    p.PlanQuantity AS PlanQuantity, 
+                    p.UnitOfMeasurement AS UnitOfMeasurement, 
+                    pm.ItemName AS ItemName 
+                FROM Products p 
+                LEFT JOIN ProductMasters pm ON p.ProductCode = pm.ItemCode 
+                WHERE p.ProductCode = @productCode", new { productCode = recipe.ProductCode })).ToList();
 
-            IEnumerable<dynamic> byProducts = new List<dynamic>();
-            if (recipe.ProductCode != null) { byProducts = await conn.QueryAsync(@"SELECT * FROM ByProducts WHERE ByProductCode = @productCode", new { productCode = (string)recipe.ProductCode }); }
+            var byProducts = (await conn.QueryAsync<ByProductDto>(@"
+                SELECT 
+                    b.ByProductId AS ByProductId, 
+                    b.ProcessId AS ProcessId, 
+                    b.ByProductCode AS ByProductCode, 
+                    b.PlanQuantity AS PlanQuantity, 
+                    b.UnitOfMeasurement AS UnitOfMeasurement,
+                    pm.ItemName AS ByProductName
+                FROM ByProducts b
+                LEFT JOIN ProductMasters pm ON b.ByProductCode = pm.ItemCode
+                WHERE b.ByProductCode = @productCode", new { productCode = recipe.ProductCode })).ToList();
 
-            IEnumerable<dynamic> parameters = new List<dynamic>();
-            if (processIds.Any()) { parameters = await conn.QueryAsync(@"SELECT p.*, ppm.Name as ParameterName FROM Parameters p LEFT JOIN ProcessParameterMasters ppm ON p.Code = ppm.Code WHERE p.ProcessId IN @processIds", new { processIds }); }
+            var parameters = new List<ParameterDto>();
+            if (processIds.Any()) { 
+                parameters = (await conn.QueryAsync<ParameterDto>(@"
+                    SELECT 
+                        p.ParameterId AS ParameterId,
+                        p.ProcessId AS ProcessId, 
+                        p.Code AS Code, 
+                        ppm.Name as ParameterName, 
+                        p.SetpointValue as Value 
+                    FROM Parameters p 
+                    LEFT JOIN ProcessParameterMasters ppm ON p.Code = ppm.Code 
+                    WHERE p.ProcessId IN @processIds", new { processIds })).ToList(); 
+            }
 
             var responseData = new RecipeDetailResponseDto
             {
