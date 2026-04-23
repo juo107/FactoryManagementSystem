@@ -39,6 +39,7 @@ builder.Services.AddScoped<IMaterialsService, MaterialsService>();
 builder.Services.AddScoped<IProductsService, ProductsService>();
 builder.Services.AddScoped<IRecipesService, RecipesService>();
 builder.Services.AddScoped<IProductionOrderDetailsService, ProductionOrderDetailsService>();
+builder.Services.AddScoped<ISuggestionsService, SuggestionsService>();
 
 // Redis Configuration
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp => 

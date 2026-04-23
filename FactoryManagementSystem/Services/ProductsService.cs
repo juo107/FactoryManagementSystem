@@ -41,6 +41,11 @@ namespace FactoryManagementSystem.Services
             var pageSizeInt = Math.Min(Math.Max(pageSize, 1), 100);
             var offset = (pageInt - 1) * pageSizeInt;
 
+            string queryParams = $"q={q}_st={status}_sts={statuses}_t={type}_ts={types}";
+            string cacheKey = $"products:search:{queryParams}:{page}:{pageSize}";
+            var cached = await _cache.GetAsync<ApiResponse<PagedResponse<ProductDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             var (whereSql, p) = BuildWhereClause(q, status, statuses, type, types);
             using var conn = Connection;
 
@@ -63,7 +68,7 @@ namespace FactoryManagementSystem.Services
             p.Add("offset", offset);
             p.Add("pageSize", pageSizeInt);
 
-            var results = await conn.QueryAsync<ProductDto>(dataSql, p);
+            var results = (await conn.QueryAsync<ProductDto>(dataSql, p)).ToList();
             
             foreach (var item in results)
             {
@@ -73,22 +78,46 @@ namespace FactoryManagementSystem.Services
                 }
             }
 
-            return ApiResponse<PagedResponse<ProductDto>>.Success(
+            var result = ApiResponse<PagedResponse<ProductDto>>.Success(
                 new PagedResponse<ProductDto>(results, total, pageInt, pageSizeInt)
             );
+
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
         public async Task<ApiResponse<object>> GetStatsSearchAsync(string? q, string? status, string? statuses, string? type, string? types)
         {
+            string queryParams = $"q={q}_st={status}_sts={statuses}_t={type}_ts={types}";
+            string cacheKey = $"products:stats:{queryParams}";
+            var cached = await _cache.GetAsync<ApiResponse<object>>(cacheKey);
+            if (cached != null) return cached;
+
             var (whereSql, p) = BuildWhereClause(q, status, statuses, type, types);
             using var conn = Connection;
-            var countSql = $@"SELECT COUNT(*) FROM ProductMasters p {whereSql}";
-            var total = await conn.ExecuteScalarAsync<int>(countSql, p);
-            return ApiResponse<object>.Success(new { Total = total });
+            
+            var statsSql = $@"
+                SELECT 
+                    COUNT(*) AS TotalProducts,
+                    SUM(CASE WHEN p.Item_Status = 'ACTIVE' THEN 1 ELSE 0 END) AS ActiveProducts,
+                    COUNT(DISTINCT p.Item_Type) AS TotalTypes,
+                    COUNT(DISTINCT p.[Group]) AS TotalGroups
+                FROM ProductMasters p 
+                {whereSql}
+            ";
+            
+            var stats = await conn.QueryFirstAsync<object>(statsSql, p);
+            var result = ApiResponse<object>.Success(stats);
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
         public async Task<ApiResponse<ProductDto>> GetByIdAsync(string id)
         {
+            string cacheKey = $"products:detail:{id}";
+            var cached = await _cache.GetAsync<ApiResponse<ProductDto>>(cacheKey);
+            if (cached != null) return cached;
+
             var sql = @"
                 SELECT 
                     p.ProductMasterId, p.ItemCode, p.ItemName, p.Item_Type, p.[Group], p.Category, p.Brand, 
@@ -111,7 +140,9 @@ namespace FactoryManagementSystem.Services
                 product.MhuTypes = JsonSerializer.Deserialize<List<MhuTypeDto>>(product.MhuTypesJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
             }
 
-            return ApiResponse<ProductDto>.Success(product);
+            var result = ApiResponse<ProductDto>.Success(product);
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(15));
+            return result;
         }
 
         private (string whereSql, DynamicParameters p) BuildWhereClause(string? q, string? status, string? statuses, string? type, string? types)

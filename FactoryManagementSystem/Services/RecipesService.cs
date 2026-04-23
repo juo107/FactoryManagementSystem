@@ -26,6 +26,11 @@ namespace FactoryManagementSystem.Services
 
         public async Task<ApiResponse<object>> GetStatsSearchAsync(string? search, string? status, string? statuses)
         {
+            string queryParams = $"q={search}_st={status}_sts={statuses}";
+            string cacheKey = $"recipes:stats:{queryParams}";
+            var cached = await _cache.GetAsync<ApiResponse<object>>(cacheKey);
+            if (cached != null) return cached;
+
             var whereCommon = new StringBuilder("1=1");
             var parameters = new DynamicParameters();
 
@@ -61,6 +66,8 @@ namespace FactoryManagementSystem.Services
                 totalVersions = stats?.totalVersions ?? 0,
                 draft = 0
             });
+            
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
             return result;
         }
 
@@ -69,6 +76,11 @@ namespace FactoryManagementSystem.Services
             page = Math.Max(1, page);
             limit = Math.Max(1, Math.Min(100, limit));
             var skip = (page - 1) * limit;
+
+            string queryParams = $"q={search}_st={status}_sts={statuses}";
+            string cacheKey = $"recipes:search:{queryParams}:{page}:{limit}";
+            var cached = await _cache.GetAsync<ApiResponse<PagedResponse<RecipeDto>>>(cacheKey);
+            if (cached != null) return cached;
 
             var where = new StringBuilder("1=1");
             var parameters = new DynamicParameters();
@@ -120,6 +132,8 @@ namespace FactoryManagementSystem.Services
             var result = ApiResponse<PagedResponse<RecipeDto>>.Success(
                 new PagedResponse<RecipeDto>(data, total, page, limit)
             );
+            
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
             return result;
         }
 

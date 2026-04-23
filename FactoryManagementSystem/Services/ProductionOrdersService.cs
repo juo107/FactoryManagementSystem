@@ -117,6 +117,11 @@ namespace FactoryManagementSystem.Services
 
         public async Task<ApiResponse<OrderStatsDto>> GetStatsSearchAsync(string searchQuery, string dateFrom, string dateTo, string processAreas, string shifts, string statuses)
         {
+            string queryParams = $"q={searchQuery}_df={dateFrom}_dt={dateTo}_pa={processAreas}_sh={shifts}_st={statuses}";
+            string cacheKey = $"production_orders:stats:{queryParams}";
+            var cached = await _cache.GetAsync<ApiResponse<OrderStatsDto>>(cacheKey);
+            if (cached != null) return cached;
+
             using var conn = Connection;
             var where = new List<string>();
             var p = new DynamicParameters();
@@ -158,8 +163,8 @@ namespace FactoryManagementSystem.Services
             {
                 var arr = statuses.Split(',').Select(s => s.Trim()).ToList();
                 var conds = new List<string>();
-                if (arr.Contains("Đang chạy")) conds.Add("r.ProductionOrderNumber IS NOT NULL");
-                if (arr.Contains("Đang chờ")) conds.Add("r.ProductionOrderNumber IS NULL");
+                if (arr.Contains("Đang chạy")) conds.Add("mmc.ProductionOrderNumber IS NOT NULL");
+                if (arr.Contains("Đang chờ")) conds.Add("mmc.ProductionOrderNumber IS NULL");
                 if (conds.Count == 1) statusCondition = conds[0];
                 else if (conds.Count == 2) statusCondition = $"({string.Join(" OR ", conds)})";
             }
@@ -185,17 +190,25 @@ namespace FactoryManagementSystem.Services
             int inProgress = stats.inProgress ?? 0;
             int completed = stats.completed ?? 0;
 
-            return ApiResponse<OrderStatsDto>.Success(new OrderStatsDto
+            var result = ApiResponse<OrderStatsDto>.Success(new OrderStatsDto
             {
                 Total = total,
                 InProgress = inProgress,
                 Completed = completed,
                 Stopped = total - inProgress
             });
+            
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
         public async Task<ApiResponse<OrderStatsDto>> GetStatsSearchV2Async(string searchQuery, string dateFrom, string dateTo, string processAreas, string shifts, string statuses, string pos, string batchIds)
         {
+            string queryParams = $"q={searchQuery}_df={dateFrom}_dt={dateTo}_pa={processAreas}_sh={shifts}_st={statuses}_po={pos}_ba={batchIds}";
+            string cacheKey = $"production_orders:stats_v2:{queryParams}";
+            var cached = await _cache.GetAsync<ApiResponse<OrderStatsDto>>(cacheKey);
+            if (cached != null) return cached;
+
             using var conn = Connection;
             var where = new List<string>();
             var p = new DynamicParameters();
@@ -273,17 +286,25 @@ namespace FactoryManagementSystem.Services
             ";
 
             var stats = await conn.QueryFirstAsync(sql, p);
-            return ApiResponse<OrderStatsDto>.Success(new OrderStatsDto
+            var result = ApiResponse<OrderStatsDto>.Success(new OrderStatsDto
             {
                 Total = (int)(stats.total ?? 0),
                 InProgress = (int)(stats.inProgress ?? 0),
                 Completed = (int)(stats.completed ?? 0),
                 Stopped = (int)(stats.stopped ?? 0)
             });
+            
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
         public async Task<ApiResponse<PagedResponse<ProductionOrderDto>>> SearchAsync(string? searchQuery, string? dateFrom, string? dateTo, string? processAreas, string? shifts, string? statuses, int page, int limit, int total)
         {
+            string queryParams = $"q={searchQuery}_df={dateFrom}_dt={dateTo}_pa={processAreas}_sh={shifts}_st={statuses}";
+            string cacheKey = $"production_orders:search:{queryParams}:{page}:{limit}:{total}";
+            var cached = await _cache.GetAsync<ApiResponse<PagedResponse<ProductionOrderDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             using var conn = Connection;
             page = Math.Max(1, page);
             limit = Math.Min(100, Math.Max(1, limit));
@@ -336,7 +357,8 @@ namespace FactoryManagementSystem.Services
             if (!string.IsNullOrEmpty(statusCondition)) where.Add(statusCondition);
             string whereClause = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
 
-            if (page == 1 || total == 0)
+            int finalTotal = total;
+            if (page == 1 || finalTotal == 0)
             {
                 var countSql = $@"
                     SELECT COUNT(*) AS total
@@ -348,7 +370,7 @@ namespace FactoryManagementSystem.Services
                       ON po.ProductionOrderNumber = mmc.ProductionOrderNumber
                     {whereClause}
                 ";
-                total = await conn.ExecuteScalarAsync<int>(countSql, p);
+                finalTotal = await conn.ExecuteScalarAsync<int>(countSql, p);
             }
 
             p.Add("offset", offset);
@@ -359,7 +381,7 @@ namespace FactoryManagementSystem.Services
                     po.ProductionOrderId, po.ProductionOrderNumber, po.ProductionLine, po.ProductCode, po.RecipeCode,
                     po.RecipeVersion, po.LotNumber, po.ProcessArea, po.PlannedStart, po.PlannedEnd, po.Quantity,
                     po.UnitOfMeasurement, po.Plant, po.Shopfloor, po.Shift,
-                    pm.ItemName, rd.RecipeName,
+                    pm.ItemName AS ProductName, rd.RecipeName,
                     CASE WHEN mmc.ProductionOrderNumber IS NOT NULL THEN 1 ELSE 0 END AS Status,
                     mmc.MaxBatch AS CurrentBatch,
                     ISNULL(b.TotalBatches, 0) AS TotalBatches
@@ -381,18 +403,23 @@ namespace FactoryManagementSystem.Services
                 OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
             ";
 
-            p.Add("offset", offset);
-            p.Add("limit", limit);
-
             var dtos = await conn.QueryAsync<ProductionOrderDto>(sqlQuery, p);
 
-            return ApiResponse<PagedResponse<ProductionOrderDto>>.Success(
-                new PagedResponse<ProductionOrderDto>(dtos, total, page, limit)
+            var result = ApiResponse<PagedResponse<ProductionOrderDto>>.Success(
+                new PagedResponse<ProductionOrderDto>(dtos, finalTotal, page, limit)
             );
+            
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
 
         public async Task<ApiResponse<PagedResponse<ProductionOrderDto>>> SearchV2Async(string? searchQuery, string? dateFrom, string? dateTo, string? processAreas, string? shifts, string? statuses, string? pos, string? batchIds, int page, int limit, int total)
         {
+            string queryParams = $"q={searchQuery}_df={dateFrom}_dt={dateTo}_pa={processAreas}_sh={shifts}_st={statuses}_po={pos}_ba={batchIds}";
+            string cacheKey = $"production_orders:search_v2:{queryParams}:{page}:{limit}:{total}";
+            var cached = await _cache.GetAsync<ApiResponse<PagedResponse<ProductionOrderDto>>>(cacheKey);
+            if (cached != null) return cached;
+
             using var conn = Connection;
             page = Math.Max(1, page);
             limit = Math.Min(100, Math.Max(1, limit));
@@ -457,7 +484,8 @@ namespace FactoryManagementSystem.Services
             if (!string.IsNullOrEmpty(statusCondition)) where.Add(statusCondition);
             string whereClause = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
 
-            if (page == 1 || total == 0)
+            int finalTotal = total;
+            if (page == 1 || finalTotal == 0)
             {
                 var countSql = $@"
                     SELECT COUNT(*) AS total
@@ -469,7 +497,7 @@ namespace FactoryManagementSystem.Services
                       ON po.ProductionOrderNumber = mmc.ProductionOrderNumber
                     {whereClause}
                 ";
-                total = await conn.ExecuteScalarAsync<int>(countSql, p);
+                finalTotal = await conn.ExecuteScalarAsync<int>(countSql, p);
             }
 
             p.Add("offset", offset);
@@ -480,7 +508,7 @@ namespace FactoryManagementSystem.Services
                     po.ProductionOrderId, po.ProductionOrderNumber, po.ProductionLine, po.ProductCode, po.RecipeCode, 
                     po.RecipeVersion, po.LotNumber, po.ProcessArea, po.PlannedStart, po.PlannedEnd, po.Quantity, 
                     po.UnitOfMeasurement, po.Plant, po.Shopfloor, po.Shift, po.Status,
-                    pm.ItemName, rd.RecipeName,
+                    pm.ItemName AS ProductName, rd.RecipeName,
                     mmc.MaxBatch AS CurrentBatch, 
                     ISNULL(b_cnt.TotalBatches, 0) AS TotalBatches
                 FROM ProductionOrders po
@@ -519,9 +547,12 @@ namespace FactoryManagementSystem.Services
                 }
             }
 
-            return ApiResponse<PagedResponse<ProductionOrderDto>>.Success(
-                new PagedResponse<ProductionOrderDto>(rows, total, page, limit)
+            var result = ApiResponse<PagedResponse<ProductionOrderDto>>.Success(
+                new PagedResponse<ProductionOrderDto>(rows, finalTotal, page, limit)
             );
+            
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+            return result;
         }
     }
 }
