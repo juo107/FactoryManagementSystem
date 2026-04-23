@@ -17,7 +17,8 @@ namespace FactoryManagementSystem.Services
             { "ProductMasters", new[] { "ItemCode", "ItemName", "Group", "Category" } },
             { "ProductionOrders", new[] { "ProductionOrderNumber", "ProductCode", "ProductName", "RecipeCode", "ProcessArea" } },
             { "RecipeDetails", new[] { "RecipeCode", "RecipeName", "ProductCode" } },
-            { "MESMaterialConsumption", new[] { "BatchCode", "IngredientCode", "ProductionOrderNumber" } }
+            { "MESMaterialConsumption", new[] { "BatchCode", "IngredientCode", "ProductionOrderNumber" } },
+            { "MESCompleteBatch", new[] { "ProductionOrder", "BatchNumber", "MachineCode", "ProductCode" } }
         };
 
         public SuggestionsService(IConfiguration config, IRedisCacheService cache)

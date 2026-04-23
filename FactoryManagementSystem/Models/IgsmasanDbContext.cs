@@ -43,6 +43,8 @@ public partial class IgsmasanDbContext : DbContext
 
     public virtual DbSet<MesmaterialConsumptionLog> MesmaterialConsumptionLogs { get; set; }
 
+    public virtual DbSet<MESCompleteBatch> MescompleteBatches { get; set; }
+
     public virtual DbSet<Mhutype> Mhutypes { get; set; }
 
     public virtual DbSet<MovementOrder> MovementOrders { get; set; }
@@ -281,6 +283,20 @@ public partial class IgsmasanDbContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
                 .HasColumnName("timestampStart");
+        });
+
+        modelBuilder.Entity<MESCompleteBatch>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.ToTable("MESCompleteBatch");
+
+            entity.Property(e => e.ProductionOrder).HasMaxLength(100);
+            entity.Property(e => e.BatchNumber).HasMaxLength(50);
+            entity.Property(e => e.BatchSize).HasColumnType("decimal(18, 3)");
+            entity.Property(e => e.BatchUOM).HasMaxLength(20);
+            entity.Property(e => e.ProductCode).HasMaxLength(50);
+            entity.Property(e => e.MachineCode).HasMaxLength(50);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
         });
 
         modelBuilder.Entity<MesmaterialConsumption>(entity =>
