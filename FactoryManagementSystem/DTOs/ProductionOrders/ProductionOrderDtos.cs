@@ -56,6 +56,12 @@ namespace FactoryManagementSystem.DTOs.ProductionOrders
         [JsonPropertyName("processArea")]
         public string? ProcessArea { get; set; }
 
+        [JsonPropertyName("plant")]
+        public string? Plant { get; set; }
+
+        [JsonPropertyName("shopfloor")]
+        public string? Shopfloor { get; set; }
+
         [JsonPropertyName("status")]
         public int? Status { get; set; }
 
@@ -97,6 +103,9 @@ namespace FactoryManagementSystem.DTOs.ProductionOrders
 
         [JsonPropertyName("shifts")]
         public IEnumerable<string> Shifts { get; set; } = new List<string>();
+
+        [JsonPropertyName("statuses")]
+        public IEnumerable<string> Statuses { get; set; } = new List<string>();
 
         [JsonPropertyName("productionOrderNumbers")]
         public IEnumerable<string> ProductionOrderNumbers { get; set; } = new List<string>();

@@ -60,12 +60,13 @@ namespace FactoryManagementSystem.Services
                     t.StartTime, t.EndTime, t.TransferStatus, t.RetryCount, t.NextRetryAt, t.ProcessingAt, 
                     t.RequestJson, t.ResponseContent, t.SentAt, t.CreatedAt, t.UpdatedAt
                 FROM MESCompleteBatch t
-                LEFT JOIN (
-                    SELECT DISTINCT pr.ProductionOrderNumber, pm.ItemName
+                OUTER APPLY (
+                    SELECT TOP 1 pm.ItemName
                     FROM ProductionOrders pr
                     LEFT JOIN ProductMasters pm ON pr.ProductCode = pm.ItemCode
-                    WHERE pr.ProductionOrderNumber IS NOT NULL
-                ) p ON t.ProductionOrder = p.ProductionOrderNumber
+                    WHERE pr.ProductionOrderNumber = t.ProductionOrder
+                    ORDER BY pr.ProductionOrderId DESC
+                ) p
                 {whereClause}
                 ORDER BY t.Id DESC
                 OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
@@ -100,7 +101,13 @@ namespace FactoryManagementSystem.Services
             if (!allowedColumns.Contains(column)) return Enumerable.Empty<string>();
 
             using var conn = Connection;
-            var sql = $"SELECT DISTINCT {column} FROM MESCompleteBatch WHERE {column} IS NOT NULL AND {column} <> '' ORDER BY LEN({column}) ASC, {column} ASC";
+            var sql = $@"
+                SELECT {column} FROM (
+                    SELECT DISTINCT {column} 
+                    FROM MESCompleteBatch 
+                    WHERE {column} IS NOT NULL AND {column} <> ''
+                ) AS t 
+                ORDER BY LEN({column}) ASC, {column} ASC";
             return await conn.QueryAsync<string>(sql);
         }
     }

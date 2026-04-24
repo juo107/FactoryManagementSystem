@@ -32,13 +32,13 @@ namespace FactoryManagementSystem.DTOs.Materials
         [JsonPropertyName("datetime")]
         public DateTime? Datetime { get; set; }
 
-        [JsonPropertyName("operatorId")]
+        [JsonPropertyName("operator_ID")]
         public string? Operator_ID { get; set; }
 
         [JsonPropertyName("supplyMachine")]
         public string? SupplyMachine { get; set; }
 
-        [JsonPropertyName("response")]
+        [JsonPropertyName("respone")]
         public string? Respone { get; set; }
 
         [JsonPropertyName("status")]
@@ -100,7 +100,7 @@ namespace FactoryManagementSystem.DTOs.Materials
         [JsonPropertyName("datetime")]
         public DateTime? Datetime { get; set; }
 
-        [JsonPropertyName("operatorId")]
+        [JsonPropertyName("operator_ID")]
         public string? Operator_ID { get; set; }
 
         [JsonPropertyName("supplyMachine")]
@@ -112,7 +112,7 @@ namespace FactoryManagementSystem.DTOs.Materials
         [JsonPropertyName("request")]
         public string? Request { get; set; }
 
-        [JsonPropertyName("response")]
+        [JsonPropertyName("respone")]
         public string? Respone { get; set; }
 
         [JsonPropertyName("status1")]

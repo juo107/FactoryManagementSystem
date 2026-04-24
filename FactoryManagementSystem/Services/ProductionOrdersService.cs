@@ -54,13 +54,17 @@ namespace FactoryManagementSystem.Services
 
                 SELECT DISTINCT Shift FROM ProductionOrders 
                 WHERE Shift IS NOT NULL AND LTRIM(RTRIM(Shift)) <> '' {whereClause};
+
+                SELECT DISTINCT CAST(Status AS NVARCHAR) FROM ProductionOrders 
+                WHERE Status IS NOT NULL {whereClause};
             ";
 
             using var multi = await conn.QueryMultipleAsync(sql, p);
             var result = ApiResponse<OrderFiltersDto>.Success(new OrderFiltersDto
             {
                 ProcessAreas = await multi.ReadAsync<string>(),
-                Shifts = await multi.ReadAsync<string>()
+                Shifts = await multi.ReadAsync<string>(),
+                Statuses = await multi.ReadAsync<string>()
             });
 
             await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
@@ -98,6 +102,9 @@ namespace FactoryManagementSystem.Services
                 SELECT DISTINCT Shift FROM ProductionOrders 
                 WHERE Shift IS NOT NULL AND LTRIM(RTRIM(Shift)) <> '' {whereClause};
 
+                SELECT DISTINCT CAST(Status AS NVARCHAR) FROM ProductionOrders 
+                WHERE Status IS NOT NULL {whereClause};
+
                 SELECT DISTINCT ProductionOrderNumber
                 FROM ProductionOrders
                 WHERE ProductionOrderNumber IS NOT NULL AND LTRIM(RTRIM(ProductionOrderNumber)) <> '' {whereClause}
@@ -108,6 +115,7 @@ namespace FactoryManagementSystem.Services
             {
                 ProcessAreas = await multi.ReadAsync<string>(),
                 Shifts = await multi.ReadAsync<string>(),
+                Statuses = await multi.ReadAsync<string>(),
                 ProductionOrderNumbers = await multi.ReadAsync<string>()
             });
 
@@ -161,12 +169,18 @@ namespace FactoryManagementSystem.Services
             string statusCondition = "";
             if (!string.IsNullOrWhiteSpace(statuses))
             {
-                var arr = statuses.Split(',').Select(s => s.Trim()).ToList();
+                var statusStr = statuses.Trim('[', ']').Replace("\"", "");
+                var arr = statusStr.Split(',').Select(s => s.Trim()).ToList();
                 var conds = new List<string>();
-                if (arr.Contains("Đang chạy")) conds.Add("mmc.ProductionOrderNumber IS NOT NULL");
-                if (arr.Contains("Đang chờ")) conds.Add("mmc.ProductionOrderNumber IS NULL");
-                if (conds.Count == 1) statusCondition = conds[0];
-                else if (conds.Count == 2) statusCondition = $"({string.Join(" OR ", conds)})";
+                if (arr.Contains("Bình thường") || arr.Contains("1")) 
+                    conds.Add("po.Status = 1");
+                if (arr.Contains("Đã hủy") || arr.Contains("-1")) 
+                    conds.Add("po.Status = -1");
+                
+                if (conds.Count > 0)
+                {
+                    statusCondition = conds.Count == 1 ? conds[0] : "(" + string.Join(" OR ", conds) + ")";
+                }
             }
 
             var allConditions = where.ToList();
@@ -176,26 +190,28 @@ namespace FactoryManagementSystem.Services
             var sql = $@"
                 SELECT
                     COUNT(*) AS total,
-                    SUM(CASE WHEN po.Status = 2 THEN 1 ELSE 0 END) AS completed,
-                    SUM(CASE WHEN mmc.ProductionOrderNumber IS NOT NULL THEN 1 ELSE 0 END) AS inProgress
+                    SUM(CASE WHEN po.Status = 1 THEN 1 ELSE 0 END) AS inProgress,
+                    SUM(CASE WHEN po.Status = -1 THEN 1 ELSE 0 END) AS stopped,
+                    SUM(CASE WHEN po.Status = 2 THEN 1 ELSE 0 END) AS completed
                 FROM ProductionOrders po
                 LEFT JOIN (
                     SELECT DISTINCT ProductionOrderNumber FROM MESMaterialConsumption
-                ) mmc ON po.ProductionOrderNumber = mmc.ProductionOrderNumber
+                ) mmc ON LTRIM(RTRIM(po.ProductionOrderNumber)) = LTRIM(RTRIM(mmc.ProductionOrderNumber))
                 {whereClause}
             ";
 
             var stats = await conn.QueryFirstAsync(sql, p);
-            int total = stats.total ?? 0;
-            int inProgress = stats.inProgress ?? 0;
-            int completed = stats.completed ?? 0;
+            int totalCount = stats.total ?? 0;
+            int inProgressCount = stats.inProgress ?? 0;
+            int stoppedCount = stats.stopped ?? 0;
+            int completedCount = stats.completed ?? 0;
 
             var result = ApiResponse<OrderStatsDto>.Success(new OrderStatsDto
             {
-                Total = total,
-                InProgress = inProgress,
-                Completed = completed,
-                Stopped = total - inProgress
+                Total = totalCount,
+                InProgress = inProgressCount,
+                Completed = completedCount,
+                Stopped = stoppedCount
             });
             
             await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
@@ -258,12 +274,23 @@ namespace FactoryManagementSystem.Services
             string statusCondition = "";
             if (!string.IsNullOrWhiteSpace(statuses))
             {
-                var arr = statuses.Split(',').Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                var statusStr = statuses.Trim();
+                if (statusStr.StartsWith("[") && statusStr.EndsWith("]"))
+                {
+                    statusStr = statusStr.Substring(1, statusStr.Length - 2);
+                }
+                statusStr = statusStr.Replace("\"", "").Replace("'", "");
+                var arr = statusStr.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
                 var conds = new List<string>();
-                if (arr.Contains("Bình thường")) conds.Add("po.Status = 1");
-                if (arr.Contains("Đã hủy")) conds.Add("po.Status = -1");
-                if (conds.Count == 1) statusCondition = conds[0];
-                else if (conds.Count > 1) statusCondition = "(" + string.Join(" OR ", conds) + ")";
+                if (arr.Contains("Đang chạy") || arr.Contains("1")) 
+                    conds.Add("mmc.ProductionOrderNumber IS NOT NULL");
+                if (arr.Contains("Đang chờ") || arr.Contains("0")) 
+                    conds.Add("mmc.ProductionOrderNumber IS NULL");
+                
+                if (conds.Count > 0)
+                {
+                    statusCondition = conds.Count == 1 ? conds[0] : "(" + string.Join(" OR ", conds) + ")";
+                }
             }
 
             var allConditions = where.ToList();
@@ -272,17 +299,24 @@ namespace FactoryManagementSystem.Services
 
             var sql = $@"
                 WITH FilteredPO AS (
-                    SELECT DISTINCT po.ProductionOrderNumber, po.Status
+                    SELECT DISTINCT po.ProductionOrderNumber
                     FROM ProductionOrders po
                     LEFT JOIN Batches b ON b.ProductionOrderId = po.ProductionOrderId
+                    LEFT JOIN (
+                        SELECT DISTINCT ProductionOrderNumber FROM MESMaterialConsumption
+                    ) mmc ON LTRIM(RTRIM(po.ProductionOrderNumber)) = LTRIM(RTRIM(mmc.ProductionOrderNumber))
                     {whereClause}
                 )
                 SELECT
                     COUNT(*) AS total,
-                    SUM(CASE WHEN Status = 2 THEN 1 ELSE 0 END) AS completed,
-                    SUM(CASE WHEN Status = 1 THEN 1 ELSE 0 END) AS inProgress,
-                    SUM(CASE WHEN Status = -1 THEN 1 ELSE 0 END) AS stopped
-                FROM FilteredPO
+                    SUM(CASE WHEN mmc.ProductionOrderNumber IS NOT NULL THEN 1 ELSE 0 END) AS inProgress,
+                    SUM(CASE WHEN mmc.ProductionOrderNumber IS NULL THEN 1 ELSE 0 END) AS stopped,
+                    SUM(CASE WHEN po.Status = 2 THEN 1 ELSE 0 END) AS completed
+                FROM FilteredPO po_filtered
+                JOIN ProductionOrders po ON po.ProductionOrderNumber = po_filtered.ProductionOrderNumber
+                LEFT JOIN (
+                    SELECT DISTINCT LTRIM(RTRIM(ProductionOrderNumber)) AS ProductionOrderNumber FROM MESMaterialConsumption
+                ) mmc ON LTRIM(RTRIM(po.ProductionOrderNumber)) = mmc.ProductionOrderNumber
             ";
 
             var stats = await conn.QueryFirstAsync(sql, p);
@@ -346,12 +380,16 @@ namespace FactoryManagementSystem.Services
             string statusCondition = "";
             if (!string.IsNullOrWhiteSpace(statuses))
             {
-                var arr = statuses.Split(',').Select(s => s.Trim()).ToList();
+                var statusStr = statuses.Trim('[', ']').Replace("\"", "");
+                var arr = statusStr.Split(',').Select(s => s.Trim()).ToList();
                 var conds = new List<string>();
-                if (arr.Contains("Đang chạy")) conds.Add("mmc.ProductionOrderNumber IS NOT NULL");
-                if (arr.Contains("Đang chờ")) conds.Add("mmc.ProductionOrderNumber IS NULL");
+                if (arr.Contains("Bình thường") || arr.Contains("1")) 
+                    conds.Add("po.Status = 1");
+                if (arr.Contains("Đã hủy") || arr.Contains("-1")) 
+                    conds.Add("po.Status = -1");
+                
                 if (conds.Count == 1) statusCondition = conds[0];
-                else if (conds.Count == 2) statusCondition = "(" + string.Join(" OR ", conds) + ")";
+                else if (conds.Count == 2) statusCondition = $"({string.Join(" OR ", conds)})";
             }
 
             if (!string.IsNullOrEmpty(statusCondition)) where.Add(statusCondition);
@@ -364,10 +402,10 @@ namespace FactoryManagementSystem.Services
                     SELECT COUNT(*) AS total
                     FROM ProductionOrders po
                     LEFT JOIN (
-                      SELECT DISTINCT ProductionOrderNumber
+                      SELECT DISTINCT LTRIM(RTRIM(ProductionOrderNumber)) AS ProductionOrderNumber
                       FROM MESMaterialConsumption
                     ) mmc
-                      ON po.ProductionOrderNumber = mmc.ProductionOrderNumber
+                      ON LTRIM(RTRIM(po.ProductionOrderNumber)) = mmc.ProductionOrderNumber
                     {whereClause}
                 ";
                 finalTotal = await conn.ExecuteScalarAsync<int>(countSql, p);
@@ -379,20 +417,39 @@ namespace FactoryManagementSystem.Services
             var sqlQuery = $@"
                 SELECT
                     po.ProductionOrderId, po.ProductionOrderNumber, po.ProductionLine, po.ProductCode, po.RecipeCode,
-                    po.RecipeVersion, po.LotNumber, po.ProcessArea, po.PlannedStart, po.PlannedEnd, po.Quantity,
-                    po.UnitOfMeasurement, po.Plant, po.Shopfloor, po.Shift,
-                    pm.ItemName AS ProductName, rd.RecipeName,
-                    CASE WHEN mmc.ProductionOrderNumber IS NOT NULL THEN 1 ELSE 0 END AS Status,
+                    po.RecipeVersion, po.LotNumber, po.ProcessArea, po.PlannedStart, po.PlannedEnd, 
+                    CAST(CAST(po.Quantity AS FLOAT) AS DECIMAL(18,4)) AS Quantity,
+                    po.UnitOfMeasurement, po.Plant, po.Shopfloor, po.Shift, rd.RecipeDetailsId,
+                    pm.ItemName AS ProductName, rd_info.RecipeName, 
+                    CAST(CAST(p_prod.PlanQuantity AS FLOAT) AS DECIMAL(18,4)) AS ProductQuantity,
+                    po.Status AS Status,
                     mmc.MaxBatch AS CurrentBatch,
                     ISNULL(b.TotalBatches, 0) AS TotalBatches
                 FROM ProductionOrders po
-                LEFT JOIN ProductMasters pm ON po.ProductCode = pm.ItemCode
-                LEFT JOIN RecipeDetails rd ON po.RecipeCode = rd.RecipeCode AND po.RecipeVersion = rd.Version
                 LEFT JOIN (
-                    SELECT ProductionOrderNumber, MAX(BatchCode) AS MaxBatch
+                    SELECT ItemCode, MAX(ItemName) AS ItemName
+                    FROM ProductMasters
+                    GROUP BY ItemCode
+                ) pm ON po.ProductCode = pm.ItemCode
+                LEFT JOIN (
+                    SELECT ProductCode, Version, MAX(RecipeDetailsId) as RecipeDetailsId
+                    FROM RecipeDetails
+                    GROUP BY ProductCode, Version
+                ) rd ON rd.ProductCode = po.ProductCode AND CAST(rd.Version AS NVARCHAR) = CAST(po.RecipeVersion AS NVARCHAR)
+                LEFT JOIN RecipeDetails rd_info ON rd_info.RecipeDetailsId = rd.RecipeDetailsId
+                LEFT JOIN (
+                    SELECT ProductCode, MAX(PlanQuantity) AS PlanQuantity
+                    FROM Products
+                    GROUP BY ProductCode
+                ) p_prod ON po.ProductCode = p_prod.ProductCode
+                -- Re-add the join to get the RecipeName if needed, or use rd_info
+                -- Actually, let's just use rd_info for RecipeName
+                
+                LEFT JOIN (
+                    SELECT LTRIM(RTRIM(ProductionOrderNumber)) AS ProductionOrderNumber, MAX(BatchCode) AS MaxBatch
                     FROM MESMaterialConsumption
-                    GROUP BY ProductionOrderNumber
-                ) mmc ON po.ProductionOrderNumber = mmc.ProductionOrderNumber
+                    GROUP BY LTRIM(RTRIM(ProductionOrderNumber))
+                ) mmc ON LTRIM(RTRIM(po.ProductionOrderNumber)) = mmc.ProductionOrderNumber
                 LEFT JOIN (
                     SELECT ProductionOrderId, COUNT(*) AS TotalBatches
                     FROM Batches
@@ -473,12 +530,24 @@ namespace FactoryManagementSystem.Services
             string statusCondition = "";
             if (!string.IsNullOrWhiteSpace(statuses))
             {
-                var arr = statuses.Split(',').Select(x => x.Trim()).ToList();
+                // Handle both comma-separated and JSON array formats
+                var statusStr = statuses.Trim();
+                if (statusStr.StartsWith("[") && statusStr.EndsWith("]"))
+                {
+                    statusStr = statusStr.Substring(1, statusStr.Length - 2);
+                }
+                statusStr = statusStr.Replace("\"", "").Replace("'", "");
+                var arr = statusStr.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
                 var conds = new List<string>();
-                if (arr.Contains("Bình thường")) conds.Add("po.Status = 1");
-                if (arr.Contains("Đã hủy")) conds.Add("po.Status = -1");
-                if (conds.Count == 1) statusCondition = conds[0];
-                else if (conds.Count > 1) statusCondition = "(" + string.Join(" OR ", conds) + ")";
+                if (arr.Contains("Đang chạy") || arr.Contains("1")) 
+                    conds.Add("mmc.ProductionOrderNumber IS NOT NULL");
+                if (arr.Contains("Đang chờ") || arr.Contains("0")) 
+                    conds.Add("mmc.ProductionOrderNumber IS NULL");
+                
+                if (conds.Count > 0)
+                {
+                    statusCondition = conds.Count == 1 ? conds[0] : "(" + string.Join(" OR ", conds) + ")";
+                }
             }
 
             if (!string.IsNullOrEmpty(statusCondition)) where.Add(statusCondition);
@@ -491,10 +560,10 @@ namespace FactoryManagementSystem.Services
                     SELECT COUNT(*) AS total
                     FROM ProductionOrders po
                     LEFT JOIN (
-                      SELECT DISTINCT ProductionOrderNumber
+                      SELECT DISTINCT LTRIM(RTRIM(ProductionOrderNumber)) AS ProductionOrderNumber
                       FROM MESMaterialConsumption
                     ) mmc
-                      ON po.ProductionOrderNumber = mmc.ProductionOrderNumber
+                      ON LTRIM(RTRIM(po.ProductionOrderNumber)) = mmc.ProductionOrderNumber
                     {whereClause}
                 ";
                 finalTotal = await conn.ExecuteScalarAsync<int>(countSql, p);
@@ -506,19 +575,36 @@ namespace FactoryManagementSystem.Services
             var sqlQuery = $@"
                 SELECT
                     po.ProductionOrderId, po.ProductionOrderNumber, po.ProductionLine, po.ProductCode, po.RecipeCode, 
-                    po.RecipeVersion, po.LotNumber, po.ProcessArea, po.PlannedStart, po.PlannedEnd, po.Quantity, 
-                    po.UnitOfMeasurement, po.Plant, po.Shopfloor, po.Shift, po.Status,
-                    pm.ItemName AS ProductName, rd.RecipeName,
+                    po.RecipeVersion, po.LotNumber, po.ProcessArea, po.PlannedStart, po.PlannedEnd, 
+                    CAST(CAST(po.Quantity AS FLOAT) AS DECIMAL(18,4)) AS Quantity, 
+                    po.UnitOfMeasurement, po.Plant, po.Shopfloor, po.Shift, rd.RecipeDetailsId,
+                    pm.ItemName AS ProductName, rd_info.RecipeName, 
+                    CAST(CAST(p_prod.PlanQuantity AS FLOAT) AS DECIMAL(18,4)) AS ProductQuantity,
+                    CASE WHEN mmc.ProductionOrderNumber IS NOT NULL THEN 1 ELSE 0 END AS Status,
                     mmc.MaxBatch AS CurrentBatch, 
                     ISNULL(b_cnt.TotalBatches, 0) AS TotalBatches
                 FROM ProductionOrders po
-                LEFT JOIN ProductMasters pm ON po.ProductCode = pm.ItemCode
-                LEFT JOIN RecipeDetails rd ON po.RecipeCode = rd.RecipeCode AND po.RecipeVersion = rd.Version
                 LEFT JOIN (
-                    SELECT ProductionOrderNumber, MAX(BatchCode) AS MaxBatch 
+                    SELECT ItemCode, MAX(ItemName) AS ItemName
+                    FROM ProductMasters
+                    GROUP BY ItemCode
+                ) pm ON po.ProductCode = pm.ItemCode
+                LEFT JOIN (
+                    SELECT ProductCode, Version, MAX(RecipeDetailsId) as RecipeDetailsId
+                    FROM RecipeDetails
+                    GROUP BY ProductCode, Version
+                ) rd ON rd.ProductCode = po.ProductCode AND CAST(rd.Version AS NVARCHAR) = CAST(po.RecipeVersion AS NVARCHAR)
+                LEFT JOIN RecipeDetails rd_info ON rd_info.RecipeDetailsId = rd.RecipeDetailsId
+                LEFT JOIN (
+                    SELECT ProductCode, MAX(PlanQuantity) AS PlanQuantity
+                    FROM Products
+                    GROUP BY ProductCode
+                ) p_prod ON po.ProductCode = p_prod.ProductCode
+                LEFT JOIN (
+                    SELECT LTRIM(RTRIM(ProductionOrderNumber)) AS ProductionOrderNumber, MAX(BatchCode) AS MaxBatch 
                     FROM MESMaterialConsumption 
-                    GROUP BY ProductionOrderNumber
-                ) mmc ON po.ProductionOrderNumber = mmc.ProductionOrderNumber
+                    GROUP BY LTRIM(RTRIM(ProductionOrderNumber))
+                ) mmc ON LTRIM(RTRIM(po.ProductionOrderNumber)) = mmc.ProductionOrderNumber
                 LEFT JOIN (
                     SELECT ProductionOrderId, COUNT(*) AS TotalBatches 
                     FROM Batches 
@@ -534,7 +620,7 @@ namespace FactoryManagementSystem.Services
             var poIds = rows.Select(r => r.ProductionOrderId).Distinct().ToList();
             if (poIds.Any())
             {
-                var batchesSql = "SELECT BatchId, ProductionOrderId, BatchNumber, Quantity, UnitOfMeasurement, Status FROM Batches WHERE ProductionOrderId IN @poIds";
+                var batchesSql = "SELECT BatchId, ProductionOrderId, BatchNumber, CAST(CAST(Quantity AS FLOAT) AS DECIMAL(18,4)) AS Quantity, UnitOfMeasurement, Status FROM Batches WHERE ProductionOrderId IN @poIds";
                 var batchesResult = await conn.QueryAsync<BatchDto>(batchesSql, new { poIds });
                 var batchesByPoId = batchesResult.GroupBy(b => b.ProductionOrderId).ToDictionary(g => g.Key, g => g.ToList());
                 

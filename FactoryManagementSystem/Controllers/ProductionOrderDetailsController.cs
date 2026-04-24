@@ -51,12 +51,13 @@ namespace FactoryManagementSystem.Controllers
         public async Task<ActionResult<ApiResponse<object>>> GetMaterialConsumptions(
             [FromQuery] string productionOrderNumber,
             [FromQuery] int page = 1,
-            [FromQuery] int limit = 20)
+            [FromQuery] int limit = 20,
+            [FromBody] List<string>? batches = null)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(productionOrderNumber)) return BadRequest(ApiResponse<object>.Error("productionOrderNumber là bắt buộc"));
-                var result = await _service.GetMaterialConsumptionsAsync(productionOrderNumber, page, limit);
+                var result = await _service.GetMaterialConsumptionsAsync(productionOrderNumber, page, limit, batches);
                 return Ok(result);
             }
             catch (Exception ex)

@@ -62,7 +62,7 @@ namespace FactoryManagementSystem.Services
             // Xây dựng chuỗi chọn cột để tạo Label (ví dụ: ItemCode + ' - ' + ItemName)
             // Lưu ý: Cần CAST sang NVARCHAR để tránh lỗi nếu có cột không phải chuỗi
             string labelExpression = requestedColumns.Count > 1 
-                ? string.Join(" + ' - ' + ", requestedColumns.Select(c => $"ISNULL(CAST([{c}] AS NVARCHAR(MAX)), '')"))
+                ? string.Join(" + ' | ' + ", requestedColumns.Select(c => $"ISNULL(CAST([{c}] AS NVARCHAR(MAX)), '')"))
                 : $"[{requestedColumns[0]}]";
 
             string valueColumn = requestedColumns[0]; // Cột đầu tiên luôn làm giá trị thực tế (Value)

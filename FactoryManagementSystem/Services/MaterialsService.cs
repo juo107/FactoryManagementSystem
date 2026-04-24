@@ -216,7 +216,7 @@ namespace FactoryManagementSystem.Services
             var sql = $@"
                 SELECT 
                     mmc.id AS Id, mmc.productionOrderNumber AS ProductionOrderNumber, mmc.batchCode AS BatchCode,
-                    mmc.quantity AS Quantity, mmc.ingredientCode AS IngredientCode, pm.ItemName AS IngredientName,
+                    CAST(CAST(mmc.quantity AS FLOAT) AS DECIMAL(18,4)) AS Quantity, mmc.ingredientCode AS IngredientCode, pm.ItemName AS IngredientName,
                     mmc.lot AS Lot, mmc.unitOfMeasurement AS UnitOfMeasurement, mmc.datetime AS Datetime,
                     mmc.operator_ID AS Operator_ID, mmc.supplyMachine AS SupplyMachine,
                     mmc.respone AS Respone, mmc.status AS Status, mmc.status1 AS Status1,
@@ -336,7 +336,10 @@ namespace FactoryManagementSystem.Services
             var whereClause = BuildSearchWhere(query, p);
 
             var sql = $@"
-                SELECT COUNT(*) AS Total
+                SELECT 
+                    COUNT(*) AS Total,
+                    SUM(CASE WHEN mmc.respone = 'Success' THEN 1 ELSE 0 END) AS SuccessCount,
+                    SUM(CASE WHEN mmc.respone <> 'Success' OR mmc.respone IS NULL THEN 1 ELSE 0 END) AS FailedCount
                 FROM MESMaterialConsumption mmc WITH (NOLOCK)
                 LEFT JOIN ProductionOrders po WITH (NOLOCK)
                   ON mmc.productionOrderNumber = po.ProductionOrderNumber
@@ -344,8 +347,13 @@ namespace FactoryManagementSystem.Services
             ";
 
             using var conn = Connection;
-            var total = await conn.ExecuteScalarAsync<int>(sql, p);
-            var result = ApiResponse<object>.Success(new { Total = total });
+            var stats = await conn.QueryFirstOrDefaultAsync<dynamic>(sql, p);
+            var result = ApiResponse<object>.Success(new 
+            { 
+                Total = stats?.Total ?? 0,
+                Success = stats?.SuccessCount ?? 0,
+                Failed = stats?.FailedCount ?? 0
+            });
             await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(5));
             return result;
         }

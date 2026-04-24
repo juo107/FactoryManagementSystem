@@ -44,7 +44,7 @@ namespace FactoryManagementSystem.Services
             var sql = @"
               SELECT
                 i.IngredientCode AS ingredientCode,
-                i.Quantity AS quantity,
+                CAST(CAST(i.Quantity AS FLOAT) AS DECIMAL(18,4)) AS quantity,
                 i.UnitOfMeasurement AS unitOfMeasurement,
                 pm.ItemName AS itemName,
                 po.ProductCode AS productCode,
@@ -77,7 +77,7 @@ namespace FactoryManagementSystem.Services
             });
         }
 
-        public async Task<ApiResponse<object>> GetMaterialConsumptionsAsync(string productionOrderNumber, int page, int limit)
+        public async Task<ApiResponse<object>> GetMaterialConsumptionsAsync(string productionOrderNumber, int page, int limit, List<string>? batches = null)
         {
             var pageNum = Math.Max(1, page);
             var pageLimit = Math.Min(1000, Math.Max(1, limit));
@@ -85,14 +85,23 @@ namespace FactoryManagementSystem.Services
             var to = pageNum * pageLimit;
 
             var sql = @"
-                ;WITH BatchCTE AS (
-                  SELECT
-                    b.BatchNumber AS batchCode,
-                    ROW_NUMBER() OVER (ORDER BY b.BatchNumber) AS rn
+                ;WITH AllBatches AS (
+                  SELECT b.BatchNumber AS batchCode
                   FROM Batches b
-                  JOIN ProductionOrders po
-                    ON po.ProductionOrderId = b.ProductionOrderId
+                  JOIN ProductionOrders po ON po.ProductionOrderId = b.ProductionOrderId
                   WHERE po.ProductionOrderNumber = @prodOrderNum
+                    AND (@hasBatches = 0 OR b.BatchNumber IN @batchList)
+                  
+                  UNION
+                  
+                  SELECT mc.batchCode
+                  FROM MESMaterialConsumption mc
+                  WHERE mc.productionOrderNumber = @prodOrderNum
+                    AND (@hasBatches = 0 OR mc.batchCode IN @batchList)
+                ),
+                BatchCTE AS (
+                  SELECT batchCode, ROW_NUMBER() OVER (ORDER BY batchCode) AS rn
+                  FROM AllBatches
                 ),
                 PagedBatch AS (
                   SELECT batchCode
@@ -100,14 +109,19 @@ namespace FactoryManagementSystem.Services
                   WHERE rn BETWEEN @from AND @to
                 ),
                 RecipeIngredient AS (
-                  SELECT DISTINCT
+                  SELECT 
                     i.IngredientCode,
-                    pm.ItemName
+                    pm.ItemName,
+                    CAST(CAST(i.Quantity AS FLOAT) AS DECIMAL(18,4)) AS quantity,
+                    i.UnitOfMeasurement
                   FROM ProductionOrders po
-                  JOIN RecipeDetails rd
-                    ON (rd.RecipeCode = po.RecipeCode OR rd.ProductCode = po.ProductCode)
-                  AND CAST(rd.Version AS NVARCHAR) = CAST(po.RecipeVersion AS NVARCHAR)
-                  JOIN Processes p ON p.RecipeDetailsId = rd.RecipeDetailsId
+                  JOIN (
+                    SELECT ProductCode, Version, MAX(RecipeDetailsId) as LatestId
+                    FROM RecipeDetails
+                    GROUP BY ProductCode, Version
+                  ) rd_latest ON rd_latest.ProductCode = po.ProductCode
+                    AND CAST(rd_latest.Version AS NVARCHAR) = CAST(po.RecipeVersion AS NVARCHAR)
+                  JOIN Processes p ON p.RecipeDetailsId = rd_latest.LatestId
                   JOIN Ingredients i ON i.ProcessId = p.ProcessId
                   LEFT JOIN ProductMasters pm ON pm.ItemCode = i.IngredientCode
                   WHERE po.ProductionOrderNumber = @prodOrderNum
@@ -128,48 +142,55 @@ namespace FactoryManagementSystem.Services
                 )
 
                 SELECT
-                  pb.batchCode,
-                  r.IngredientCode,
-                  r.ItemName,
-                  mc.id,
-                  mc.lot,
-                  mc.quantity,
-                  COALESCE(mc.unitOfMeasurement, ing.UnitOfMeasurement) AS unitOfMeasurement,
-                  mc.datetime,
-                  mc.operator_ID,
-                  mc.supplyMachine,
-                  mc.count,
-                  mc.request,
-                  mc.respone,
-                  mc.status1,
-                  mc.timestamp
+                  pb.batchCode AS BatchCode,
+                  CASE 
+                    WHEN r.ItemName IS NOT NULL THEN r.IngredientCode + ' - ' + r.ItemName
+                    ELSE r.IngredientCode
+                  END AS IngredientCode,
+                  r.ItemName AS IngredientName,
+                  mc.id AS Id,
+                  mc.lot AS Lot,
+                  CAST(CAST(mc.quantity AS FLOAT) AS DECIMAL(18,4)) AS Quantity,
+                  COALESCE(mc.unitOfMeasurement, ing.UnitOfMeasurement) AS UnitOfMeasurement,
+                  mc.datetime AS Datetime,
+                  mc.operator_ID AS Operator_ID,
+                  mc.supplyMachine AS SupplyMachine,
+                  mc.count AS Count,
+                  mc.request AS Request,
+                  mc.respone AS Respone,
+                  mc.status1 AS Status1,
+                  mc.timestamp AS Timestamp
                 FROM PagedBatch pb
                 CROSS JOIN RecipeIngredient r
                 LEFT JOIN MESMaterialConsumption mc
                   ON mc.productionOrderNumber = @prodOrderNum
-                AND mc.batchCode = pb.batchCode
-                AND mc.ingredientCode = r.IngredientCode
+                  AND mc.batchCode = pb.batchCode
+                  AND mc.ingredientCode = r.IngredientCode
                 LEFT JOIN Ingredients ing
                   ON ing.IngredientCode = r.IngredientCode
+                WHERE (ISNULL(TRY_CAST(r.quantity AS FLOAT), 0) > 0 OR mc.id IS NOT NULL)
 
                 UNION ALL
 
                 SELECT
-                  mc.batchCode,
-                  e.IngredientCode,
-                  e.ItemName,
-                  mc.id,
-                  mc.lot,
-                  mc.quantity,
-                  mc.unitOfMeasurement,
-                  mc.datetime,
-                  mc.operator_ID,
-                  mc.supplyMachine,
-                  mc.count,
-                  mc.request,
-                  mc.respone,
-                  mc.status1,
-                  mc.timestamp
+                  mc.batchCode AS BatchCode,
+                  CASE 
+                    WHEN e.ItemName IS NOT NULL THEN e.IngredientCode + ' - ' + e.ItemName
+                    ELSE e.IngredientCode
+                  END AS IngredientCode,
+                  e.ItemName AS IngredientName,
+                  mc.id AS Id,
+                  mc.lot AS Lot,
+                  CAST(CAST(mc.quantity AS FLOAT) AS DECIMAL(18,4)) AS Quantity,
+                  mc.unitOfMeasurement AS UnitOfMeasurement,
+                  mc.datetime AS Datetime,
+                  mc.operator_ID AS Operator_ID,
+                  mc.supplyMachine AS SupplyMachine,
+                  mc.count AS Count,
+                  mc.request AS Request,
+                  mc.respone AS Respone,
+                  mc.status1 AS Status1,
+                  mc.timestamp AS Timestamp
                 FROM MESMaterialConsumption mc
                 JOIN PagedBatch pb
                   ON pb.batchCode = mc.batchCode
@@ -177,37 +198,24 @@ namespace FactoryManagementSystem.Services
                   ON e.IngredientCode = mc.ingredientCode
                 WHERE mc.productionOrderNumber = @prodOrderNum
 
-                ORDER BY batchCode, IngredientCode;
+                ORDER BY BatchCode, IngredientCode;
             ";
 
             using var conn = Connection;
-            var rows = await conn.QueryAsync(sql, new { prodOrderNum = productionOrderNumber.Trim(), from, to });
-            var data = rows.Select(row => new
-            {
-                Id = row.id,
-                BatchCode = row.batchCode,
-                IngredientCode = row.ItemName != null
-                  ? $"{(string)row.IngredientCode} - {(string)row.ItemName}"
-                  : (string)row.IngredientCode,
-                IngredientName = (string)row.ItemName,
-                Lot = row.lot ?? "",
-                Quantity = row.quantity,
-                UnitOfMeasurement = row.unitOfMeasurement ?? "",
-                Datetime = row.datetime,
-                OperatorId = row.operator_ID,
-                SupplyMachine = row.supplyMachine,
-                Count = row.count ?? 0,
-                Request = row.request,
-                Response = row.respone,
-                Status1 = row.status1,
-                Timestamp = row.timestamp
-            });
+            var data = (await conn.QueryAsync<MaterialConsumptionResponseDto>(sql, new 
+            { 
+                prodOrderNum = productionOrderNumber.Trim(), 
+                from, 
+                to,
+                hasBatches = batches != null && batches.Any() ? 1 : 0,
+                batchList = batches ?? new List<string>()
+            })).ToList();
 
             return ApiResponse<object>.Success(new
             {
                 page = pageNum,
                 limit = pageLimit,
-                items = data
+                data = data
             });
         }
 
@@ -265,7 +273,7 @@ namespace FactoryManagementSystem.Services
                     limit = pageLimit,
                     totalCount = 0,
                     totalPages = 0,
-                    items = new List<MaterialConsumptionResponseDto>()
+                    data = new List<MaterialConsumptionResponseDto>()
                 });
             }
 
@@ -281,7 +289,7 @@ namespace FactoryManagementSystem.Services
             END AS IngredientCode,
             pm.ItemName AS IngredientName,
             mc.lot AS Lot, 
-            mc.quantity AS Quantity, 
+            CAST(CAST(mc.quantity AS FLOAT) AS DECIMAL(18,4)) AS Quantity, 
             mc.unitOfMeasurement AS UnitOfMeasurement,
             mc.datetime AS Datetime, 
             mc.operator_ID AS Operator_ID, 
@@ -306,7 +314,7 @@ namespace FactoryManagementSystem.Services
                 limit = pageLimit,
                 totalCount,
                 totalPages = (int)Math.Ceiling((double)totalCount / pageLimit),
-                items = items
+                data = items
             });
         }
 
@@ -357,12 +365,16 @@ namespace FactoryManagementSystem.Services
 
             var sql = @"
               SELECT
-                po.*,
+                po.ProductionOrderId, po.ProductionLine, po.ProductCode, po.ProductionOrderNumber, 
+                po.RecipeCode, po.RecipeVersion, po.Shift, po.PlannedStart, po.PlannedEnd, 
+                CAST(CAST(po.Quantity AS FLOAT) AS DECIMAL(18,4)) AS Quantity, po.UnitOfMeasurement, po.LotNumber, po.timestamp, po.Plant, 
+                po.Shopfloor, po.ProcessArea,
+                CASE WHEN MAX(mc.ProductionOrderNumber) IS NOT NULL THEN -1 ELSE 0 END AS Status,
                 pm.ItemName,
                 rd.RecipeName,
                 rd.RecipeDetailsId,
-                p.PlanQuantity AS ProductQuantity,
-                MAX(mc.BatchCode) AS CurrentBatch,
+                CAST(CAST(p.PlanQuantity AS FLOAT) AS DECIMAL(18,4)) AS ProductQuantity,
+                MAX(mc.MaxBatch) AS CurrentBatch,
                 COUNT(DISTINCT b.BatchNumber) AS TotalBatches
               FROM ProductionOrders po
               LEFT JOIN ProductMasters pm ON po.ProductCode = pm.ItemCode
@@ -374,13 +386,18 @@ namespace FactoryManagementSystem.Services
                 AND CAST(rd_latest.Version AS NVARCHAR) = CAST(po.RecipeVersion AS NVARCHAR)
               LEFT JOIN RecipeDetails rd ON rd.RecipeDetailsId = rd_latest.LatestId
               LEFT JOIN Products p ON po.ProductCode = p.ProductCode
-              LEFT JOIN MESMaterialConsumption mc ON mc.ProductionOrderNumber = po.ProductionOrderNumber
+              LEFT JOIN (
+                SELECT LTRIM(RTRIM(ProductionOrderNumber)) AS ProductionOrderNumber, MAX(BatchCode) AS MaxBatch 
+                FROM MESMaterialConsumption
+                GROUP BY LTRIM(RTRIM(ProductionOrderNumber))
+              ) mc ON LTRIM(RTRIM(po.ProductionOrderNumber)) = mc.ProductionOrderNumber
               LEFT JOIN Batches b ON b.ProductionOrderId = po.ProductionOrderId
               WHERE po.ProductionOrderId = @ProductionOrderId
-              GROUP BY po.ProductionOrderId, po.ProductionLine, po.ProductCode, po.ProductionOrderNumber, 
-                       po.RecipeCode, po.RecipeVersion, po.Shift, po.PlannedStart, po.PlannedEnd, 
-                       po.Quantity, po.UnitOfMeasurement, po.LotNumber, po.timestamp, po.Plant, 
-                       po.Shopfloor, po.ProcessArea, po.Status, pm.ItemName, rd.RecipeName, rd.RecipeDetailsId, p.PlanQuantity";
+              GROUP BY 
+                po.ProductionOrderId, po.ProductionLine, po.ProductCode, po.ProductionOrderNumber, 
+                po.RecipeCode, po.RecipeVersion, po.Shift, po.PlannedStart, po.PlannedEnd, 
+                po.Quantity, po.UnitOfMeasurement, po.LotNumber, po.timestamp, po.Plant, 
+                po.Shopfloor, po.ProcessArea, pm.ItemName, rd.RecipeName, rd.RecipeDetailsId, p.PlanQuantity";
 
             using var conn = Connection;
             var o = await conn.QueryFirstOrDefaultAsync<dynamic>(sql, new { ProductionOrderId = id });
